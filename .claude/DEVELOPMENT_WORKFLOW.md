@@ -16,7 +16,7 @@ The project starts at **ground zero**: every task in [`tasks/README.md`](tasks/R
  │  2. Dev session "T-001":  /implement-task T-001                          │
  │        → creates branch task/T-001-…  → implements the changes there     │
  │                     │                                                    │
- │  3. Test session "T-001_test": review the code + run the manual test     │
+ │  3. Test session "T-001_test": /review-task  + run the manual test       │
  │                     │                                                    │
  │         ┌── result not as expected? ──┐                                  │
  │         │  undo / extra prompt / fix  │ ← back to the dev session        │
@@ -58,6 +58,7 @@ The project starts at **ground zero**: every task in [`tasks/README.md`](tasks/R
 | Command | What it does |
 |---|---|
 | `/implement-task <task ID or milestone file>` | Creates a branch for the task, then implements it on that branch only. Ends with the manual test steps. |
+| `/review-task [task ID]` | Run in the `_test` session. Reviews the task branch against the task, the spec rules and the code conventions, then gives a verdict and a fix list for the dev session. It doesn't change code. |
 | `/implement-task done <task ID>` | Marks the task `Done` after you've validated it. |
 | `/commit-push` | Commits all changes with a generated description and pushes the current branch to GitHub. |
 | `/cleanup-branch` | After the PR is merged: asks for confirmation, pulls the latest `main` and deletes the feature branch. |
@@ -113,16 +114,18 @@ A fresh session for review means the reviewer doesn't share the developer's assu
 ### Step 3 — Review and test in the test session
 
 1. Open another terminal in the same folder, run `claude`, then `/rename T-001_test`.
-2. Ask it to review and test. For example:
+2. Run the review:
    ```
-   Review the changes on the current branch for task T-001 in
-   .claude/tasks/M0-baseline.md. Check them against the task's Build
-   list and "Done when", and the spec rules in .claude/CLAUDE.md.
-   Then walk me through the task's manual test steps one at a time
-   and check each result with me. Report problems; do not fix them.
+   /review-task T-001
    ```
-   `/code-review` is also available, for a code review of the current changes.
-3. **You run the manual test.** Any step that needs Azure sign-in, Fabric or a browser has to be checked by you, and compared against its **Expected** result.
+   With no argument, it reads the task ID from the branch name. It reports:
+   - **a verdict:** ✅ Ready for manual test, or ❌ Needs changes
+   - **a Build checklist:** each Build item as done, partial or missing, with file and line evidence
+   - **verified findings**, by severity: Blocker, Major or Minor
+   - **the offline checks it ran**, with their results
+   - **a ready-to-paste fix list** for the dev session
+3. If the verdict is **Ready**, ask the test session to walk you through the manual test: "walk me through the manual test of T-001 one step at a time".
+4. **You run the manual test.** Any step that needs Azure sign-in, Fabric or a browser has to be checked by you, and compared against its **Expected** result.
 
 ### Step 4 — If the results are not as expected
 
@@ -131,7 +134,7 @@ Go back to the **development session (`T-001`)** and use one of these options:
 | Situation | What to do |
 |---|---|
 | The change went in a wrong direction | **Undo it.** Ask in the chat ("undo the last change to X"), or use `/rewind` to roll back to an earlier point in the conversation and its file changes. |
-| The approach is right but something is missing or wrong | **Add a prompt** in the chat describing the problem. Paste the failing test output from the test session. |
+| The approach is right but something is missing or wrong | **Add a prompt** in the chat describing the problem. Paste the **fix list** from `/review-task`, or the failing test output from the test session. |
 | The **task itself** asks for something conflicting or wrong | **Fix the task first.** Remove or correct the conflicting part in the task file. Then set the task's status in [`tasks/README.md`](tasks/README.md) back to `In progress` and run `/implement-task T-001` again. It resumes on the **same branch**. |
 
 Then repeat Step 3 in the test session. Use a **new** `_test` session if the old one is full of outdated findings.
@@ -188,7 +191,7 @@ You're back on an up-to-date `main`. Start the next task, T-002, with **new** se
 [ ] Read the task in .claude/tasks/<milestone>.md; edit it if needed
 [ ] New session → /rename T-xxx → /implement-task T-xxx
 [ ] Confirm the branch task/T-xxx-… was created
-[ ] New session → /rename T-xxx_test → review the code + run the manual test
+[ ] New session → /rename T-xxx_test → /review-task → run the manual test
 [ ] Fix in the T-xxx session if needed (undo / extra prompt / fix the task) → retest
 [ ] /implement-task done T-xxx
 [ ] /commit-push
