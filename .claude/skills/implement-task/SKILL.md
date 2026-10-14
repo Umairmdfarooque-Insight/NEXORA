@@ -1,6 +1,6 @@
 ---
 name: implement-task
-description: Implement the next task from the Nexora task plan in .claude/tasks/. Accepts a milestone file (e.g. M0-baseline.md or M0), a task ID (e.g. T-101), or nothing (next pending task in the whole plan). Implements exactly one task, then hands over the task's manual test.
+description: Implement the next task from the Nexora task plan in .claude/tasks/. Accepts a milestone file (e.g. M0-baseline.md or M0), a task ID (e.g. T-101), or nothing (next pending task in the whole plan). Implements exactly one task, then hands over the task's acceptance criteria for manual testing.
 argument-hint: "[M0-baseline.md | M0 | T-101 | done T-101]"
 ---
 
@@ -8,7 +8,7 @@ argument-hint: "[M0-baseline.md | M0 | T-101 | done T-101]"
 
 Argument: `$ARGUMENTS`
 
-The plan is in `.claude/tasks/`. `README.md` holds the task index, the status column and the defaults assumed for the spec's open decisions. Each `M*-*.md` file holds the tasks of one milestone. Every task has **Depends on**, **Spec**, **Build**, **Manual test** and **Done when**.
+The plan is in `.claude/tasks/`. `README.md` holds the task index, the status column and the defaults assumed for the spec's open decisions. Each `M*-*.md` file holds the tasks of one milestone. Every task has a **Depends on · Spec** line and six sections: **Problem statement**, **Functional requirements**, **API contracts**, **Constraints**, **Edge cases and error handling** and **Acceptance criteria**. `CONTRACTS.md` defines the shared shapes (run, states and transitions, error envelope, approvals, gate results, validation reports) that tasks reference.
 
 Status values used in the README index: `Not started` → `In progress` → `Awaiting manual test` → `Done`.
 
@@ -19,16 +19,16 @@ Status values used in the README index: `Not started` → `In progress` → `Awa
 | A milestone file or prefix (`M0-baseline.md`, `M0`, `m3`) | The first task in that file whose status is not `Done` |
 | A task ID (`T-101`, `t101`) | That task |
 | Empty | The first task in the README index whose status is not `Done` |
-| `done T-xxx` | Don't implement anything. The user confirms the manual test passed: set that task to `Done`, then report the next task in sequence. |
+| `done T-xxx` | Don't implement anything. The user confirms the acceptance criteria passed: set that task to `Done`, then report the next task in sequence. |
 
-If the resolved task is `Awaiting manual test`, don't re-implement it. Remind the user of its manual test and ask whether it passed.
+If the resolved task is `Awaiting manual test`, don't re-implement it. Remind the user of its acceptance criteria and ask whether they passed.
 
 If the argument matches nothing, list the milestone files and stop.
 
 ## 2. Check before writing code
 
 1. Read `.claude/CLAUDE.md`, `.claude/tasks/README.md` and the full task section.
-2. **Dependencies:** every task in **Depends on** must be `Done`. If any isn't, stop and tell the user which ones block it, and offer to implement the first blocking task instead. Don't skip ahead silently, because each task's manual test assumes the earlier ones passed.
+2. **Dependencies:** every task in **Depends on** must be `Done`. If any isn't, stop and tell the user which ones block it, and offer to implement the first blocking task instead. Don't skip ahead silently, because each task's acceptance criteria assume the earlier tasks passed.
 3. **Open decisions:** if this task appears under "First needed at" in the README's working-assumptions table, ask the user (AskUserQuestion) to confirm the default or choose another option before implementing. Record the answer in that table.
 4. Read the spec sections the task cites (`.claude/spec/`, `.claude/technical-documentation/`), for example FR-012 or §12 G4. The spec's business rules and the LLM/deterministic split apply to every task.
 5. Read the existing code the task touches. Extend and reuse it, and match its style. Don't write a parallel version.
@@ -59,7 +59,9 @@ Every later step for this task (implementing, verifying, status updates) stays o
 ## 4. Implement
 
 - Set the task's status to `In progress` in the README index.
-- Implement exactly what **Build** lists, and nothing from later tasks. If something from a later task seems necessary, mention it instead of building it.
+- Implement every **Functional requirement**, exactly as the **API contracts** specify: endpoint paths, request and response shapes, CLI names, file layouts and config files. Use the shared shapes and error codes from `CONTRACTS.md`. If the implementation has to change a shared shape, update `CONTRACTS.md` on the same branch and say so in the handover.
+- Respect every **Constraint**, and handle every row of **Edge cases and error handling** with the stated behavior and error code.
+- Build nothing from later tasks. If something from a later task seems necessary, mention it instead of building it.
 - Keep these spec rules:
   - LLM output is a candidate. Deterministic code validates and controls state.
   - No silent KPI assumptions.
@@ -82,5 +84,5 @@ Every later step for this task (implementing, verifying, status updates) stays o
 - Reply with:
   1. **What was built:** the branch name, files changed, and any decision made.
   2. **Verified by Claude:** what you ran, with the results.
-  3. **Manual test:** the task's steps, rewritten with the exact commands, URLs and payloads of the real implementation, each with its **Expected** result.
+  3. **Acceptance criteria to test manually:** each criterion, rewritten with the exact commands, URLs and payloads of the real implementation, with its **Expected** result. Mark which ones you already verified offline.
   4. **Next:** "When it passes, run `/implement-task done T-xxx`, then `/commit-push` to push this branch." Name the task that comes after it.

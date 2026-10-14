@@ -93,7 +93,7 @@ A fresh session for review means the reviewer doesn't share the developer's assu
 ### Step 1 — Read the task once, and adjust it if needed
 
 1. Open the task in its milestone file. For T-001, that's [`tasks/M0-baseline.md`](tasks/M0-baseline.md).
-2. Read **Depends on**, **Build**, **Manual test** and **Done when**.
+2. Read the six sections: **Problem statement**, **Functional requirements**, **API contracts**, **Constraints**, **Edge cases and error handling** and **Acceptance criteria**. Also check the **Depends on** line. Shared shapes the task references are in [`tasks/CONTRACTS.md`](tasks/CONTRACTS.md).
 3. If something is wrong, unclear, or conflicts with what you need, **edit the task file now**, before implementing. The skill implements exactly what the task says.
 
 ### Step 2 — Implement in the development session
@@ -120,12 +120,12 @@ A fresh session for review means the reviewer doesn't share the developer's assu
    ```
    With no argument, it reads the task ID from the branch name. It reports:
    - **a verdict:** ✅ Ready for manual test, or ❌ Needs changes
-   - **a Build checklist:** each Build item as done, partial or missing, with file and line evidence
+   - **a task checklist:** each functional requirement, API contract, constraint, edge case and acceptance criterion as done, partial or missing, with file and line evidence
    - **verified findings**, by severity: Blocker, Major or Minor
    - **the offline checks it ran**, with their results
    - **a ready-to-paste fix list** for the dev session
-3. If the verdict is **Ready**, ask the test session to walk you through the manual test: "walk me through the manual test of T-001 one step at a time".
-4. **You run the manual test.** Any step that needs Azure sign-in, Fabric or a browser has to be checked by you, and compared against its **Expected** result.
+3. If the verdict is **Ready**, ask the test session to walk you through the acceptance criteria: "walk me through the acceptance criteria of T-001 one at a time".
+4. **You run the manual test of each acceptance criterion.** Any step that needs Azure sign-in, Fabric or a browser has to be checked by you, and compared against its **Expected** result.
 
 ### Step 4 — If the results are not as expected
 
@@ -141,7 +141,7 @@ Then repeat Step 3 in the test session. Use a **new** `_test` session if the old
 
 ### Step 5 — Mark the task done
 
-When every manual test step passes and the **Done when** condition is met, run this in the development session:
+When every **acceptance criterion** passes, run this in the development session:
 ```
 /implement-task done T-001
 ```

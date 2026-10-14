@@ -1,6 +1,6 @@
 ---
 name: review-task
-description: Review the code of a Nexora task branch (for use in a T-xxx_test session). Checks the changes against the task's Build list and Done-when, the spec rules, correctness, security and codebase conventions, then reports verified findings and a fix list to paste into the development session. Review only - does not modify code.
+description: Review the code of a Nexora task branch (for use in a T-xxx_test session). Checks the changes against the task's functional requirements, API contracts, constraints, edge cases and acceptance criteria, the spec rules, correctness, security and codebase conventions, then reports verified findings and a fix list to paste into the development session. Review only - does not modify code.
 argument-hint: "[T-101]  (default: task from the current branch name)"
 ---
 
@@ -18,7 +18,8 @@ This review runs in a **separate session** from the one that wrote the code, so 
 - If the current branch is `main`, stop. Task work lives on task branches.
 - Read:
   - `.claude/CLAUDE.md`
-  - the task's full section in `.claude/tasks/M*-*.md`, including Depends on, Spec, Build, Manual test and Done when
+  - the task's full section in `.claude/tasks/M*-*.md`: the Depends on · Spec line, Problem statement, Functional requirements, API contracts, Constraints, Edge cases and error handling, and Acceptance criteria
+  - `.claude/tasks/CONTRACTS.md`, for the shared shapes and error codes the task references
   - the spec sections the task cites, in `.claude/spec/` and `.claude/technical-documentation/`
 - Collect **all** changes on the branch, committed and uncommitted:
   ```
@@ -31,7 +32,7 @@ This review runs in a **separate session** from the one that wrote the code, so 
 
 ## 2. Check the task conformance
 
-For every bullet in the task's **Build** list, decide its status and the evidence for it:
+Build one checklist covering the task's sections. Give each row a status and evidence:
 
 | Status | Meaning |
 |---|---|
@@ -39,10 +40,17 @@ For every bullet in the task's **Build** list, decide its status and the evidenc
 | ⚠️ Partial | Some of it is missing or deviates. Say exactly what. |
 | ❌ Missing | Not implemented |
 
+| Task section | One checklist row per… | What to verify |
+|---|---|---|
+| Functional requirements | numbered requirement | The behavior exists and does what the requirement says |
+| API contracts | endpoint, CLI command, function, file format and config file | Paths, methods, parameter names, request and response shapes, status codes, field names and file layouts match exactly. Shared shapes match `CONTRACTS.md`. Any deviation is a finding. |
+| Constraints | constraint | The constraint holds in the code, for example read-only SQL, no LLM call, deterministic output or sandbox-only |
+| Edge cases and error handling | table row | The case is handled with the stated behavior **and** the stated error code and HTTP status. A case that crashes or returns a different code is a finding. |
+| Acceptance criteria | criterion | The steps can run as written: the commands, endpoints, paths and CLI names exist. The code can produce the **Expected** result. |
+
 Also check:
 - **Scope creep:** code that belongs to a later task. Name the task, for example "this is T-302 work".
-- **Done when:** is the condition actually reachable with this code?
-- **Manual-test readiness:** could each manual-test step run as written? The commands, endpoints, file paths and CLI names must exist and match the implementation.
+- **Contract drift:** if `CONTRACTS.md` changed on the branch, check that every earlier task that uses the changed shape still works.
 
 ## 3. Review the code
 
@@ -67,8 +75,8 @@ Also check:
 
 ## 5. Severity
 
-- **Blocker:** the task's Done-when can't be met, a spec rule is violated, there's a security problem, or a manual-test step can't work as written.
-- **Major:** a bug in a realistic scenario, or a Build item that is Partial or Missing.
+- **Blocker:** an acceptance criterion can't pass, an API contract is broken, a constraint or spec rule is violated, or there's a security problem.
+- **Major:** a bug in a realistic scenario, a functional requirement that is Partial or Missing, or an edge case that is unhandled or returns the wrong error code.
 - **Minor:** a convention break, readability issue or small cleanup.
 
 ## 6. Report
@@ -77,7 +85,7 @@ Reply in this structure:
 
 1. **Verdict:** ✅ **Ready for manual test**, or ❌ **Needs changes**. Any Blocker or Major finding means Needs changes. Add one line on why.
 2. **Scope reviewed:** the branch, the base commit, and the number of files changed.
-3. **Build checklist:** the table from step 2.
+3. **Task checklist:** the table from step 2, grouped by task section.
 4. **Findings**, most severe first. Each has:
    - Severity, then `file:line`, then a one-line title
    - **What happens:** concrete input or state, and the wrong result or crash
@@ -92,5 +100,5 @@ Reply in this structure:
    ```
    Leave this out if there are no findings.
 7. **Next:**
-   - If Ready, offer to walk the user through the task's manual-test steps one at a time, checking each result against its **Expected** value.
+   - If Ready, offer to walk the user through the task's acceptance criteria one at a time, checking each result against its **Expected** value.
    - If Needs changes, tell the user to paste the fix list into the `T-xxx` session, and then run `/review-task` again, preferably in a fresh `_test` session.

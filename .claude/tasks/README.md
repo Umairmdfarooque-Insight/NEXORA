@@ -1,14 +1,28 @@
 # Nexora — Sequential Task Plan
 
-Derived from [`../spec/`](../spec/README.md) and [`../technical-documentation/`](../technical-documentation/README.md). Tasks are ordered so that each one builds only on tasks above it. Every task ends with a **manual test** a reviewer can run to confirm it works before the next task starts.
+Derived from [`../spec/`](../spec/README.md) and [`../technical-documentation/`](../technical-documentation/README.md). Tasks are ordered so that each one builds only on tasks above it. Every task ends with **acceptance criteria** a reviewer can test by hand to confirm it works before the next task starts.
 
 ## How to use this plan
 
-- Work top to bottom. Don't start a task until every task in its **Depends on** list has passed its manual test.
-- Each task lists: **Spec** references (FR/NFR/§), **Build** (what to implement), **Manual test** (numbered steps with expected results) and **Done when**.
-- Until the Rayfin UI exists (T-104), manual tests use the API's Swagger page (`http://localhost:8000/docs`) or the CLI.
+- Work top to bottom. Don't start a task until every task in its **Depends on** list has passed its acceptance criteria.
+- Shared data shapes, run states, the error envelope, approval records, gate results and validation reports are defined once in [CONTRACTS.md](CONTRACTS.md). Tasks reference that file instead of repeating them.
+
+### Task format
+
+Every task has a header line and six sections:
+
+| Section | Contents |
+|---|---|
+| **Depends on · Spec** | The tasks that must be `Done` first, and the spec references (FR/NFR/§) |
+| **Problem statement** | What is wrong or missing today, and why it matters |
+| **Functional requirements** | What the task must do, as numbered requirements |
+| **API contracts** | Inputs, outputs and data shapes: endpoints, CLI commands, function signatures, file formats and config files |
+| **Constraints** | Rules the implementation must follow: spec rules, security, determinism and limits |
+| **Edge cases and error handling** | A table of each case and the expected behavior, using the error codes from [CONTRACTS.md](CONTRACTS.md#error-envelope) |
+| **Acceptance criteria** | Numbered checks to run by hand. Each has its steps and an **Expected** result. Passing all of them means the task is done. |
+- Until the Rayfin UI exists (T-104), acceptance criteria are tested through the API's Swagger page (`http://localhost:8000/docs`) or the CLI.
 - Record progress in the [status tracker](../technical-documentation/roadmap-risks-decisions.md#project-status-tracking) and in the table below. Status values: `Not started` → `In progress` → `Awaiting manual test` → `Done`.
-- To have Claude implement a task, run `/implement-task <milestone file | task ID>` (for example `/implement-task M0-baseline.md` or `/implement-task T-101`). After the manual test passes, run `/implement-task done T-xxx`.
+- To have Claude implement a task, run `/implement-task <milestone file | task ID>` (for example `/implement-task M0-baseline.md` or `/implement-task T-101`). After the acceptance criteria pass, run `/implement-task done T-xxx`.
 
 ## Working assumptions for open decisions
 
