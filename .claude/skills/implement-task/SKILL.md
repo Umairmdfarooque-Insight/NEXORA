@@ -1,0 +1,86 @@
+---
+name: implement-task
+description: Implement the next task from the Nexora task plan in .claude/tasks/. Accepts a milestone file (e.g. M0-baseline.md or M0), a task ID (e.g. T-101), or nothing (next pending task in the whole plan). Implements exactly one task, then hands over the task's manual test.
+argument-hint: "[M0-baseline.md | M0 | T-101 | done T-101]"
+---
+
+# Implement a Nexora task
+
+Argument: `$ARGUMENTS`
+
+The plan is in `.claude/tasks/`. `README.md` holds the task index, the status column and the defaults assumed for the spec's open decisions. Each `M*-*.md` file holds the tasks of one milestone. Every task has **Depends on**, **Spec**, **Build**, **Manual test** and **Done when**.
+
+Status values used in the README index: `Not started` → `In progress` → `Awaiting manual test` → `Done`.
+
+## 1. Resolve which task to work on
+
+| Argument | Task |
+|---|---|
+| A milestone file or prefix (`M0-baseline.md`, `M0`, `m3`) | The first task in that file whose status is not `Done` |
+| A task ID (`T-101`, `t101`) | That task |
+| Empty | The first task in the README index whose status is not `Done` |
+| `done T-xxx` | Don't implement anything. The user confirms the manual test passed: set that task to `Done`, then report the next task in sequence. |
+
+If the resolved task is `Awaiting manual test`, don't re-implement it. Remind the user of its manual test and ask whether it passed.
+
+If the argument matches nothing, list the milestone files and stop.
+
+## 2. Check before writing code
+
+1. Read `.claude/CLAUDE.md`, `.claude/tasks/README.md` and the full task section.
+2. **Dependencies:** every task in **Depends on** must be `Done`. If any isn't, stop and tell the user which ones block it, and offer to implement the first blocking task instead. Don't skip ahead silently, because each task's manual test assumes the earlier ones passed.
+3. **Open decisions:** if this task appears under "First needed at" in the README's working-assumptions table, ask the user (AskUserQuestion) to confirm the default or choose another option before implementing. Record the answer in that table.
+4. Read the spec sections the task cites (`.claude/spec/`, `.claude/technical-documentation/`), for example FR-012 or §12 G4. The spec's business rules and the LLM/deterministic split apply to every task.
+5. Read the existing code the task touches. Extend and reuse it, and match its style. Don't write a parallel version.
+
+## 3. Create and switch to the task branch
+
+All work for the task happens on its own branch. Do this before changing any file. Skip this step for `done T-xxx`.
+
+1. **Resuming:** if the task is `In progress` and the README index's **Branch** column names a branch, run `git switch <that branch>` and go to step 4. Don't create a new branch.
+2. **Clean tree:** run `git status --short`. If there are uncommitted changes, stop and ask the user whether to commit them first (`/commit-push`) or carry them onto the new branch. Never stash or discard them yourself.
+3. **Base branch:**
+   - Default: `main`. Run `git fetch origin`, `git switch main`, then `git pull --ff-only`.
+   - If a dependency task's branch (from the **Branch** column) is not merged into `main`, check with `git branch -r --merged origin/main`. The new branch must contain that work, so tell the user, and base on the dependency's branch instead. If the recorded branch no longer exists locally or on the remote, `/cleanup-branch` removed it after it was merged, so base on `main`.
+4. **Name:** `task/<task-id>-<slug>`.
+   - The slug is the task title in lowercase, kebab-case, at most 5 words, using `[a-z0-9-]` only.
+   - Example: `task/T-101-run-model-state-machine`.
+5. **Check the name is available**, both locally and on the remote:
+   ```
+   git show-ref --verify --quiet refs/heads/<name>      # exit 0 = exists locally
+   git ls-remote --exit-code --heads origin <name>      # exit 0 = exists on remote
+   ```
+   If either one exists, append `-0` and check again, then `-1`, `-2` and so on until a free name is found. For example `task/T-101-run-model-state-machine-0`.
+6. **Create it:** `git switch -c <name>`. Don't push it yet; `/commit-push` does that.
+7. **Record it:** write the branch name in the task's **Branch** column in `.claude/tasks/README.md`. Tell the user which branch you are on.
+
+Every later step for this task (implementing, verifying, status updates) stays on this branch. Never switch away mid-task, and never commit task work to `main`.
+
+## 4. Implement
+
+- Set the task's status to `In progress` in the README index.
+- Implement exactly what **Build** lists, and nothing from later tasks. If something from a later task seems necessary, mention it instead of building it.
+- Keep these spec rules:
+  - LLM output is a candidate. Deterministic code validates and controls state.
+  - No silent KPI assumptions.
+  - Return a Data Gap instead of fabricating a calculation.
+  - Never send raw rows to the LLM.
+- Never read or print the values in `.env`. If a task needs new settings, add the names (with empty values) to `.env.example`.
+- Never deploy to a non-sandbox workspace, and never write to production data.
+
+## 5. Verify what you can
+
+- Run everything that doesn't need a live Azure or Fabric sign-in: imports, schema validation, CLI commands, deterministic generators, offline unit checks.
+- The manual-test steps that need live Azure, Fabric or a browser sign-in are the user's to run. Don't claim they passed. If you did run one, report its real output.
+- Fix anything that fails before handing over.
+
+## 6. Hand over
+
+- Set the task's status to `Awaiting manual test`.
+- If commands, setup or architecture changed, update `.claude/CLAUDE.md`.
+- Don't commit or push unless the user asks.
+- Reply with:
+  1. **What was built:** the branch name, files changed, and any decision made.
+  2. **Verified by Claude:** what you ran, with the results.
+  3. **Manual test:** the task's steps, rewritten with the exact commands, URLs and payloads of the real implementation, each with its **Expected** result.
+  4. **Next:** "When it passes, run `/implement-task done T-xxx`, then `/commit-push` to push this branch." Name the task that comes after it.

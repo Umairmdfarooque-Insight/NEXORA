@@ -6,6 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Nexora is the AI engine behind a UI called "Rayfin" (`APP_NAME` / `UI_APP_NAME` in `app/config.py`). It takes a business requirement in plain English and works out which tables and columns in a Microsoft Fabric Lakehouse can satisfy it. The sample data is AdventureWorks-style (`saleslt` schema).
 
+## Spec and design docs
+
+The target product is defined in `.claude/spec/` (requirements FR/NFR, business rules, acceptance scenarios) and `.claude/technical-documentation/` (architecture, artifact contracts, run states, gates G1–G6, milestones, open decisions). Both are transcribed from `Nexora_Specification_and_Technical_Design.docx` (v0.1 draft). Read them before adding a new pipeline stage.
+
+The code is an early slice of the design and does not yet produce its artifacts. Mapping of current code to the design:
+- `requirement_analyzer.py` → Requirement Compiler (M2). It returns a `RequirementSpec`, not `BusinessContract.yaml`, and has no approval or clarification loop.
+- `metadata_inventory.py`, `data_profiler.py`, `semantic_mapper.py`, `relationship_validator.py` → Metadata Harvester and relationship evidence (M3, FR-005–FR-007).
+- Not started: the Rayfin UI and run store (M1), planning (M4), TMDL/DAX (M5), reports (M6), retries, deployment and audit (M7).
+
+The build order is in `.claude/tasks/` (T-001 … T-706, grouped by milestone M0–M7). Each task has a manual test that must pass before the next task starts. `.claude/tasks/README.md` lists the defaults assumed for the spec's open decisions, such as FastAPI, an explicit state machine and a file-based run store. Use `/implement-task <milestone file | task ID>` (`.claude/skills/implement-task/SKILL.md`) to work on a task. It enforces the dependency order and keeps the README status column up to date. Use `/commit-push [branch | "note"]` (`.claude/skills/commit-push/SKILL.md`) to commit with a generated message and push. The repo is public, so that skill blocks secrets and binaries. After a branch's PR is merged, `/cleanup-branch [branch]` updates local `main` from the remote and deletes the branch, after a caution message and confirmation.
+
+Rules from the spec that constrain all new code:
+- The LLM proposes; deterministic validators decide progression.
+- No silent assumptions for KPI definitions.
+- Return "Not Feasible / Data Gap" instead of fabricating a calculation.
+
 ## Commands
 
 Windows; a virtualenv lives in `.venv` (Python 3.12).
