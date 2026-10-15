@@ -301,9 +301,26 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+### T-302 — Generic data profiler
+
+**Before you start:** same setup as T-301 (token in Swagger, API running, your UPN in `business_owner`; restore it afterwards), with run A harvested (`POST /runs/{run_A}/harvest`, scope `saleslt`) and run B harvested with `{"schemas": ["nexora_test"]}`. The contract's entities decide which tables are profiled automatically, so give run A the prompt `Show total sales by product`; add `{"tables": [...]}` to profile others. The profiler queries the SQL endpoint **as you** (on-behalf-of), so the API's app registration needs the Azure SQL Database `user_impersonation` permission with consent. If the call returns `403 CONSENT_REQUIRED`, ask your admin to grant it. Run the SQL checks below in the Lakehouse SQL endpoint in Fabric.
+
+1. 🌐 **Row count matches.** `POST /runs/{run_A}/profile` with `{"tables": ["saleslt.SalesLT_Product"]}`. **Expected:** HTTP 200 with `{"profiled": n, "warnings": n, "errors": 0}`. In the SQL endpoint run `SELECT COUNT(*) FROM saleslt.SalesLT_Product`; `GET /runs/{run_A}/inventory` shows the same number as `row_count` in that table's `profile`.
+2. 🌐 **Unique key.** In the same profile, `columns.ProductID`. **Expected:** `is_unique: true` and `distinct_count` equal to `row_count`.
+3. 🌐 **Duplicates detected.** `POST /runs/{run_B}/profile` with `{"tables": ["nexora_test.dim_product_dupes"]}`. **Expected:** `columns.ProductID.is_unique: false`, the table `status: warning`, and a warning "ProductID is not unique (n duplicate values)". Run `SELECT ProductID, COUNT(*) c FROM nexora_test.dim_product_dupes GROUP BY ProductID HAVING COUNT(*) > 1`: the number of rows equals `n` (at least 3, as T-004 AC-2).
+4. 🌐 **Date coverage.** Pick a date column of a profiled table (for example `ModifiedDate` of `SalesLT_Product`) and run `SELECT MIN(ModifiedDate), MAX(ModifiedDate) FROM saleslt.SalesLT_Product`. **Expected:** equal to `min` and `max` of that column in the profile (UTC, ISO format), and `freshness.max_value` equals the `max` of the freshness column.
+5. 🌐 **No raw strings.** Pick a known product name from the SQL endpoint (`SELECT TOP 1 Name FROM saleslt.SalesLT_Product`) and search `runs\<run_A>\MetadataInventory.json` for it (`Select-String -Path runs\<run_A>\MetadataInventory.json -Pattern "<name>"`). **Expected:** no match. String columns have counts only, no `min` or `max`.
+6. 🌐 **Edge cases.** `{"tables": ["saleslt.NoSuchTable"]}` gives `404 NOT_FOUND`; profiling before any harvest gives `404 NOT_FOUND`; profiling a `CREATED` run gives `409 WRONG_STATE`. Re-harvest run A (`POST /runs/{run_A}/harvest`): **Expected:** the inventory is version 2 and every `profile` is `null` again.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t302_offline_checks`. **Expected:** `All checks passed.` (a fake SQL endpoint over in-memory tables: counts, uniqueness, duplicate count, min and max, freshness, empty and all-null cases, removed and timed-out tables, binary columns, the 10M-row approximate path, no string values stored, SELECT-only SQL, and the 404/409/422/400 cases).
+8. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–6), which need your Entra token, SQL consent and the real Lakehouse. Claude ran step 7.
+
+---
+
 ## Next tasks
 
-Sections for T-302 and later are added when each task is implemented.
+Sections for T-303 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -323,6 +340,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t204_offline_checks.py` | T-204 | Fake-LLM checks of Gate G1, the approval actions, locking, roles and the approvals log |
 | `app/manual_tests/t205_offline_checks.py` | T-205 | Checks of `contract` and `artifacts` in the run detail and `GET /me` |
 | `app/manual_tests/t301_offline_checks.py` | T-301 | Fake-Lakehouse checks of the harvester, versioning and the harvest/inventory endpoints |
+| `app/manual_tests/t302_offline_checks.py` | T-302 | Fake-SQL-endpoint checks of the data profiler and the profile endpoint |
 
 ## Adding a task
 

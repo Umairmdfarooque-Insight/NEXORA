@@ -30,16 +30,18 @@ _VERSION_FILE = re.compile(r"MetadataInventory\.v(\d+)\.json$")
 
 
 class ScopeMissing(Exception):
-    def __init__(self):
-        super().__init__("The run has no Lakehouse scope yet. Set it with PUT /runs/{id}/scope first.")
+    def __init__(self, message: str | None = None):
+        super().__init__(
+            message or "The run has no Lakehouse scope yet. Set it with PUT /runs/{id}/scope first."
+        )
 
 
-def _canonical_hash(data: dict) -> str:
+def canonical_hash(data: dict) -> str:
     text = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _write_json(path: Path, data: dict) -> None:
+def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
@@ -100,14 +102,14 @@ def harvest_run(
         warnings=warnings,
     )
     data = inventory.to_dict()
-    _write_json(inventories_dir / f"MetadataInventory.v{version}.json", data)
-    _write_json(run_dir / CURRENT, data)
+    write_json(inventories_dir / f"MetadataInventory.v{version}.json", data)
+    write_json(run_dir / CURRENT, data)
 
     contract = run.artifacts.get("BusinessContract")
     run.artifacts[ARTIFACT] = ArtifactRef(
         path=CURRENT,
         version=version,
-        hash=_canonical_hash(data),
+        hash=canonical_hash(data),
         status="draft",
         based_on={"BusinessContract": contract.hash} if contract else {},
         updated_at=utc_now(),
