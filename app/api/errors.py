@@ -34,6 +34,7 @@ from app.llm.errors import (
 from app.workflow.approval import AlreadyApproved, Forbidden, GateFailed, UnknownArtifact
 from app.workflow.clarification import ContractLocked, NotFound, QuestionConflict, StaleVersion
 from app.workflow.compile_stage import WrongState
+from app.workflow.harvest_stage import ScopeMissing
 from app.workflow.scope import SchemaNotFound, ScopeLocked
 
 logger = logging.getLogger(__name__)
@@ -201,6 +202,10 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ScopeLocked)
     async def scope_locked(request: Request, exc: ScopeLocked):
         return error_response(409, "SCOPE_LOCKED", str(exc), {"state": exc.state.value})
+
+    @app.exception_handler(ScopeMissing)
+    async def scope_missing(request: Request, exc: ScopeMissing):
+        return error_response(400, "BAD_REQUEST", str(exc))
 
     @app.exception_handler(SchemaNotFound)
     async def schema_not_found(request: Request, exc: SchemaNotFound):

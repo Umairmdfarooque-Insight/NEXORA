@@ -97,25 +97,32 @@ class FabricLakehouseConnector:
             "api/2.1/unity-catalog/tables"
         )
 
-        response = requests.get(
-            url,
-            headers=self._get_headers(),
-            params={
-                "catalog_name": self.catalog_name,
-                "schema_name": schema_name,
-            },
-            timeout=30,
-        )
+        tables: list[dict] = []
+        seen_tokens: set[str] = set()
+        params = {
+            "catalog_name": self.catalog_name,
+            "schema_name": schema_name,
+        }
 
-        print(f"\n--- TABLE DISCOVERY DEBUG: {schema_name} ---")
-        print("Request URL:", response.url)
-        print("Status:", response.status_code)
-        print("Response:", response.text)
-        print("--- END DEBUG ---\n")
+        # Follow next_page_token until the listing ends. A repeated token would
+        # loop forever, so it stops the listing instead.
+        while True:
+            response = requests.get(
+                url,
+                headers=self._get_headers(),
+                params=params,
+                timeout=30,
+            )
+            response.raise_for_status()
 
-        response.raise_for_status()
+            body = response.json()
+            tables.extend(body.get("tables", []))
 
-        return response.json().get("tables", [])
+            token = body.get("next_page_token")
+            if not token or token in seen_tokens:
+                return tables
+            seen_tokens.add(token)
+            params = {**params, "page_token": token}
 
     def get_table_metadata(
         self, schema_name: str, table_name: str

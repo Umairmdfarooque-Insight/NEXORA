@@ -58,7 +58,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-203 | Clarification loop | M2 | Done | task/T-203-clarification-loop |
 | T-204 | Approval service and Gate G1 | M2 | Done | task/T-204-approval-service-gate-g1 |
 | T-205 | Clarification and contract review UI | M2 | Done | task/T-205-clarification-contract-review-ui |
-| T-301 | Metadata Harvester per run | [M3 Data understanding](M3-data-understanding.md) | Not started |  |
+| T-301 | Metadata Harvester per run | [M3 Data understanding](M3-data-understanding.md) | Done | task/T-301-metadata-harvester-per-run |
 | T-302 | Generic data profiler | M3 | Not started |  |
 | T-303 | Relationship evidence | M3 | Not started |  |
 | T-304 | Gate G2 and inventory UI | M3 | Not started |  |
