@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import fabric, runs
+from app.api import fabric, me, runs
 from app.api.errors import register_error_handlers
 from app.api.schemas import Health
 from app.compiler.critical_terms import load_critical_terms
@@ -64,6 +64,7 @@ app.add_middleware(
 register_error_handlers(app)
 app.include_router(runs.router)
 app.include_router(fabric.router)
+app.include_router(me.router)
 
 
 @app.get("/health", response_model=Health, tags=["health"])

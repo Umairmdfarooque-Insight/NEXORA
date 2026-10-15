@@ -37,7 +37,7 @@ from app.workflow.clarification import (
     dismiss_question,
     edit_kpi,
 )
-from app.workflow.compile_stage import compile_run, open_questions
+from app.workflow.compile_stage import compile_run, current_contract, open_questions
 from app.workflow.gates import GateResult
 from app.workflow.scope import bind_scope
 from app.workflow.states import RunState
@@ -45,6 +45,16 @@ from app.workflow.states import RunState
 router = APIRouter(
     prefix="/runs", tags=["runs"], dependencies=[Depends(current_user)]
 )
+
+def detail(run, runs_root: Path, warnings: list[str] | None = None) -> RunDetail:
+    """The run with its open questions and current contract."""
+    return RunDetail.from_run(
+        run,
+        warnings,
+        open_questions=open_questions(runs_root, run.run_id),
+        contract=current_contract(runs_root, run.run_id),
+    )
+
 
 # The store has no count query yet, so total is taken from an unbounded list.
 ALL_RUNS = 1_000_000
@@ -85,7 +95,7 @@ def get_run(
     runs_root: Path = Depends(get_runs_root),
 ):
     run = store.get(run_id)
-    return RunDetail.from_run(run, open_questions=open_questions(runs_root, run_id))
+    return detail(run, runs_root)
 
 
 @router.post("/{run_id}/compile", response_model=CompileResponse)
@@ -99,7 +109,7 @@ def compile_requirement(
     run, contract = compile_run(store, runs_root, run_id, actor=user.upn, llm=llm)
     questions = open_questions(runs_root, run_id)
     return CompileResponse(
-        run=RunDetail.from_run(run, open_questions=questions),
+        run=detail(run, runs_root),
         contract=contract,
         blocking_questions=sum(1 for q in questions if q["blocking"]),
     )
@@ -107,7 +117,7 @@ def compile_requirement(
 
 def _question_response(run, contract, runs_root: Path) -> QuestionResponse:
     return QuestionResponse(
-        run=RunDetail.from_run(run, open_questions=open_questions(runs_root, run.run_id)),
+        run=detail(run, runs_root),
         contract=contract,
     )
 
@@ -188,9 +198,7 @@ def approve(
     )
     return ApprovalResponse(
         approval=outcome.approval,
-        run=RunDetail.from_run(
-            outcome.run, open_questions=open_questions(runs_root, run_id)
-        ),
+        run=detail(outcome.run, runs_root),
         gate_result=outcome.gate_result,
         explanation=outcome.explanation,
     )
@@ -210,6 +218,7 @@ def set_scope(
     run_id: str,
     body: ScopeRequest,
     store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
     fabric: FabricApiClient = Depends(get_fabric_client),
     connector_for_scope=Depends(get_connector_factory),
 ):
@@ -222,7 +231,7 @@ def set_scope(
         body.lakehouse_id,
         body.schemas,
     )
-    return RunDetail.from_run(run, warnings)
+    return detail(run, runs_root, warnings)
 
 
 @router.get("/{run_id}/artifacts", response_model=list[ArtifactItem])

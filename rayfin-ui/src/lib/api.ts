@@ -2,8 +2,15 @@
 // all decisions (states, next actions, validation) come from the API.
 
 import type {
+  ApprovalBody,
+  ApprovalRecord,
+  ApprovalResult,
+  CompileResult,
   CreateRunBody,
+  GateResult,
   Lakehouse,
+  Me,
+  QuestionResult,
   RunDetail,
   RunList,
   ScopeBody,
@@ -143,6 +150,30 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(body),
     }),
+  getMe: () => apiFetch<Me>("/me"),
+  compile: (id: string) =>
+    apiFetch<CompileResult>(`/runs/${encodeURIComponent(id)}/compile`, { method: "POST" }),
+  answerQuestion: (id: string, qid: string, answer: string) =>
+    apiFetch<QuestionResult>(
+      `/runs/${encodeURIComponent(id)}/questions/${encodeURIComponent(qid)}/answer`,
+      { method: "POST", body: JSON.stringify({ answer }) },
+    ),
+  dismissQuestion: (id: string, qid: string, reason: string) =>
+    apiFetch<QuestionResult>(
+      `/runs/${encodeURIComponent(id)}/questions/${encodeURIComponent(qid)}/dismiss`,
+      { method: "POST", body: JSON.stringify({ reason }) },
+    ),
+  checkG1: (id: string) =>
+    apiFetch<GateResult>(`/runs/${encodeURIComponent(id)}/gates/G1/check`, {
+      method: "POST",
+    }),
+  approve: (id: string, body: ApprovalBody) =>
+    apiFetch<ApprovalResult>(`/runs/${encodeURIComponent(id)}/approvals`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  listApprovals: (id: string) =>
+    apiFetch<ApprovalRecord[]>(`/runs/${encodeURIComponent(id)}/approvals`),
   listWorkspaces: () => apiFetch<Workspace[]>("/fabric/workspaces"),
   listLakehouses: (workspaceId: string) =>
     apiFetch<Lakehouse[]>(

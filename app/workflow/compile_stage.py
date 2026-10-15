@@ -38,12 +38,18 @@ def load_current_contract(runs_root: Path, run_id: str) -> bc.BusinessContract |
     return bc.load(path)
 
 
+def current_contract(runs_root: Path, run_id: str) -> bc.BusinessContract | None:
+    """The run's current contract for the run detail. None if there is none or it can't be
+    read. Never raises."""
+    try:
+        return load_current_contract(runs_root, run_id)
+    except (bc.ContractInvalid, OSError):
+        return None
+
+
 def open_questions(runs_root: Path, run_id: str) -> list[dict]:
     """Open questions of the run's current contract, for the run detail. Never raises."""
-    try:
-        contract = load_current_contract(runs_root, run_id)
-    except (bc.ContractInvalid, OSError):
-        return []
+    contract = current_contract(runs_root, run_id)
     if contract is None:
         return []
     return [
