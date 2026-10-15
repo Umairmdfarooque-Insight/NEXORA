@@ -69,7 +69,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-405 | Gate G3 and plan review UI | M4 | Done | task/T-405-gate-g3-plan-review-ui |
 | T-501 | Sandbox deployment client | [M5 Semantic model](M5-semantic-model.md) | Done | task/T-501-sandbox-deployment-client |
 | T-502 | TMDL generator | M5 | Done | task/T-502-tmdl-generator |
-| T-503 | DAX measure generation | M5 | Not started |  |
+| T-503 | DAX measure generation | M5 | Done | task/T-503-dax-measure-generation |
 | T-504 | Model validators and Gate G4 | M5 | Not started |  |
 | T-505 | Validation and Repair service | M5 | Not started |  |
 | T-506 | Bridge-table generation | M5 | Not started |  |

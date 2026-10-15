@@ -491,9 +491,24 @@ The table holds two literal rows, so no Lakehouse connection is needed. If Fabri
 
 ---
 
+### T-503 — DAX measure generation
+
+**Before you start:** run A of T-502, in state `MODEL_GENERATING` with `model1` generated (Net Revenue with the exclusion of cancelled orders, a monthly KPI with time logic, scope with `nexora_test.dim_date`). The API must reach the real model (`.env` set up, as for the compile step). The KPI definitions are what the model gets: make sure the Net Revenue KPI's exclusions state the status value to exclude (for example "Cancelled orders have Status = 6", answered through the clarification loop), because the model never sees data and the pre-check rejects a number the definition doesn't state.
+
+1. 🌐 **Measures added.** `POST /runs/{run_A}/model/measures` in Swagger. **Expected:** HTTP 200, `version: 2`, and Net Revenue `accepted` with `dax`. Its DAX uses only objects of the ModelSpec and applies the exclusion of cancelled orders. `runs\<run_A>\ModelSpec.yaml` is version 2 with that `dax` and a `description` starting `Approved: <the formula intent>` followed by `Exclusions: ...`. `runs\<run_A>\model2\definition	ables\<fact table>.tmdl` has the `measure` and a `///` description, and `model1` is unchanged. A second call returns the same measures and `version: 2` without calling the model. The run is still `MODEL_GENERATING`. A measure may come back `rejected` with a reason: report which one and why.
+2. 🌐 **Deployed and computes.** `python -m app.cli deploy model runs\<run_A>\model2 --name Nexora_<run>`. In the web model view of the sandbox workspace, run the DAX query `EVALUATE ROW("NR", [Net Revenue])`. **Expected:** a number.
+3. 🌐 **Matches SQL.** In the Lakehouse SQL endpoint run the equivalent query, for example `SELECT SUM(d.LineTotal) FROM saleslt.SalesLT_SalesOrderDetail d JOIN saleslt.SalesLT_SalesOrderHeader h ON h.SalesOrderID = d.SalesOrderID WHERE h.Status <> 6`. **Expected:** the same value as step 2. (T-504 automates this.)
+4. 💻 **Bad reference rejected.** Not repeatable live: editing a ModelSpec column by hand makes the next call `409 STALE_VERSION`, because the file no longer matches the approved hash. The offline checks cover it: a proposal that uses `Sales[Nope]` gets one retry carrying "unknown column 'Nope' ...", and if the retry fails too the measure is `rejected` with a reason naming `Sales[Nope]`, while the other measures are still processed.
+5. 💻 **Offline checks.** `python -m app.manual_tests.t503_offline_checks`. **Expected:** `All checks passed.` (reading DAX references, every rejection rule, the 2-attempt graph path, `date table required`, the endpoint with accepted and rejected measures, the replay without a model call, the TMDL and ModelSpec versions, and the 404/409 cases).
+6. 💻 **Clean up.** Delete the model from the sandbox workspace, stop the API, and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–3), which need your Entra token, the real model and the sandbox workspace. Claude ran steps 4 and 5 (offline).
+
+---
+
 ## Next tasks
 
-Sections for T-503 and later are added when each task is implemented.
+Sections for T-504 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -523,6 +538,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t405_offline_checks.py` | T-405 | Checks of Gate G3, plan edits, Accept and Reject of the ExecutionPlan |
 | `app/manual_tests/t501_offline_checks.py` | T-501 | Fake-Fabric checks of the deployment client, the sandbox guard and `cli deploy model` |
 | `app/manual_tests/t502_offline_checks.py` | T-502 | Checks of the TMDL generator, `model/generate` and `cli model generate` |
+| `app/manual_tests/t503_offline_checks.py` | T-503 | Fake-LLM checks of the DAX pre-check, the `dax_measure` graph and `model/measures` |
 
 ## Adding a task
 

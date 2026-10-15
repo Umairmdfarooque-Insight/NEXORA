@@ -1,7 +1,7 @@
 """Request and response shapes for the API."""
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
@@ -110,6 +110,18 @@ class ModelGenerateResponse(BaseModel):
     version: int
     files: list[str]  # relative to runs/<id>/model/v<version>/
     run: RunDetail
+
+
+class MeasureResult(BaseModel):
+    name: str
+    dax: str | None = None
+    status: Literal["accepted", "rejected"]
+    reason: str | None = None
+
+
+class MeasuresResponse(BaseModel):
+    measures: list[MeasureResult]
+    version: int  # the TMDL version that includes the accepted measures
 
 
 class PlanEditRequest(BaseModel):
