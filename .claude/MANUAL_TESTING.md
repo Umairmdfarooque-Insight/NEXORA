@@ -264,9 +264,27 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+### T-205 — Clarification and contract review UI
+
+**Before you start:** do the T-204 setup: your own UPN in the `business_owner` list of `config\roles.yaml` (restore it afterwards). Start the API in one terminal (`uvicorn app.api.main:app --reload --port 8000`) and the UI in another (`cd rayfin-ui; npm install; npm run dev`), then open <http://localhost:3000> and sign in. Compile and answer steps call the real model and take a few seconds; Regenerate can take up to a minute.
+
+1. 🌐 **Ambiguous Revenue end to end.** **New run** with the prompt `Show revenue by month for 2024`, then on the run page click **Compile**. **Expected:** a progress indicator ("Compiling the requirement…") shows and the buttons are disabled while it runs. Afterwards the clarification panel lists a **Blocking** question "How is Revenue defined?", the next action is "Answer open questions" and the state is `NEEDS_CLARIFICATION`. Type `Net Revenue = SUM(LineTotal) excluding cancelled orders` in **Your answer** and click **Submit answer**. **Expected:** the question disappears, the state becomes `CREATED` (reload the page to confirm). Click **Contract review**, then **Accept**. **Expected:** the state timeline on the run page shows `CREATED → NEEDS_CLARIFICATION → CREATED → REQUIREMENT_APPROVED`, and **Approval history** on the contract page shows an `ACCEPT` entry with your UPN and the time.
+2. 🌐 **Blocked approval is explained.** Create and compile another run with the same prompt, but don't answer. Open **Contract review**. **Expected:** **Accept** is disabled with the note "Accept is unavailable: Gate G1 failed: G1.2, G1.3." (or similar), and the G1 checklist shows `G1.2` (and `G1.3`) with a red **Fail**, `G1.5` with an amber **Warning**, and the others **Pass**. If your UPN isn't in `business_owner`, Accept and Reject are hidden instead, with a note naming the role.
+3. 🌐 **Explain.** On a draft contract click **Explain**. **Expected:** an "Explanation" box appears under each KPI (for example "Net Revenue is defined as: …" or "has no definition yet") and next to each question, and **Approval history** gains an `EXPLAIN` entry. The state doesn't change.
+4. 🌐 **Stale version.** Open the contract page of a draft run in two browser tabs. In tab 1 click **Edit** on a KPI, change **Currency** and **Save**. In tab 2 (not reloaded) click **Regenerate**, **Explain** or **Accept**. **Expected:** tab 2 shows the warning "The contract changed. Reload to see the latest version. Nothing was changed.", with a **Reload** button, and no approval record is added. After **Reload** the new currency shows.
+5. 🌐 **M2 exit.** Using only Rayfin, produce an approved contract (step 1). **Expected:** the contract page shows "Approved and locked", the Edit, Accept, Reject and Regenerate controls are gone (Explain remains), and `python -m app.cli contract validate runs\<run_id>\BusinessContract.yaml` prints `VALID` with `status: approved` in the file.
+6. 🌐 **Other behaviour.** (a) With the API stopped, type an answer and click **Submit answer**. **Expected:** an error banner "Couldn't send your answer. What you typed is kept." with **Retry**, and the typed text is still in the box. Start the API and click **Retry**: the answer goes through. (b) Dismiss a non-blocking question with a reason. **Expected:** it disappears from the open list. (c) **Reject** is disabled until the comment box has text; with `Exclude tax as well` the run returns to `NEEDS_CLARIFICATION` and shows a blocking question with that text. (d) A very long answer or rationale shows **Show more / Show less**.
+7. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `pass 18`, `fail 0` (includes the Accept rules, the stale message and long-text collapsing). `npm run typecheck` and `npm run build` also finish without errors.
+8. 💻 **API checks.** `python -m app.manual_tests.t205_offline_checks`. **Expected:** `All checks passed.` (`contract` and `artifacts` in the run detail, `GET /me` with roles).
+9. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API and UI, and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the browser steps (1–6), which need your Entra sign-in and the real model. Claude ran steps 7 and 8.
+
+---
+
 ## Next tasks
 
-Sections for T-205 and later are added when each task is implemented.
+Sections for T-301 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -284,6 +302,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t202_offline_checks.py` | T-202 | Fake-LLM checks of the compile graph, ambiguity rules, versioning and the /compile endpoint |
 | `app/manual_tests/t203_offline_checks.py` | T-203 | Fake-LLM checks of answering, dismissing, locked facts and KPI edits |
 | `app/manual_tests/t204_offline_checks.py` | T-204 | Fake-LLM checks of Gate G1, the approval actions, locking, roles and the approvals log |
+| `app/manual_tests/t205_offline_checks.py` | T-205 | Checks of `contract` and `artifacts` in the run detail and `GET /me` |
 
 ## Adding a task
 

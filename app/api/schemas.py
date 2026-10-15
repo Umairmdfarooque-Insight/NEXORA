@@ -63,6 +63,7 @@ class RunList(BaseModel):
 class RunDetail(Run):
     next_action: str
     open_questions: list[dict[str, Any]] = Field(default_factory=list)  # open questions of the current contract
+    contract: BusinessContract | None = None  # the run's current contract (T-205)
     warnings: list[str] = Field(default_factory=list)
 
     @classmethod
@@ -71,12 +72,14 @@ class RunDetail(Run):
         run: Run,
         warnings: list[str] | None = None,
         open_questions: list[dict[str, Any]] | None = None,
+        contract: BusinessContract | None = None,
     ) -> "RunDetail":
         return cls(
             **run.model_dump(),
             next_action=next_action(run.state),
             open_questions=open_questions or [],
             warnings=warnings or [],
+            contract=contract,
         )
 
 
@@ -84,6 +87,13 @@ class CompileResponse(BaseModel):
     run: RunDetail
     contract: BusinessContract
     blocking_questions: int
+
+
+class MeResponse(BaseModel):
+    oid: str
+    upn: str
+    name: str
+    roles: list[str]
 
 
 class AnswerRequest(BaseModel):

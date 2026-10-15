@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { ClarificationPanel } from "@/components/ClarificationPanel";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { StateBadge } from "@/components/StateBadge";
 import { api, type ApiError } from "@/lib/api";
@@ -156,6 +157,8 @@ export default function RunDetailPage() {
               )}
             </div>
           </section>
+
+          <ClarificationPanel run={run} onRun={setRun} />
 
           <div className={styles.columns}>
             <div className={styles.stack}>
