@@ -1,0 +1,119 @@
+"""The source-resolution stage service (T-401): check the run, ask the model for candidates,
+resolve them deterministically and save SourceResolution.json.
+
+A plain function, not a graph: the stage has no loop (CONTRACTS.md#stage-graphs). It never
+changes the run state. The model's answer is kept per input (a hash of the exact request), so
+the same contract, inventory and glossary always give the same file.
+"""
+
+import hashlib
+import json
+from pathlib import Path
+
+from app.contracts.source_resolution import SCHEMA_VERSION, SourceResolution
+from app.discovery.glossary import load_glossary
+from app.discovery.source_resolver import (
+    SYSTEM_PROMPT,
+    SourceLlm,
+    Suggestions,
+    build_payload,
+    llm_schema,
+    parse_suggestions,
+    resolve,
+)
+from app.store.base import RunStore
+from app.workflow.clarification import NotFound
+from app.workflow.compile_stage import ARTIFACT as CONTRACT_ARTIFACT
+from app.workflow.compile_stage import WrongState, load_current_contract
+from app.workflow.conformed import load_conformed
+from app.workflow.harvest_stage import ARTIFACT as INVENTORY_ARTIFACT
+from app.workflow.harvest_stage import canonical_hash, load_inventory, write_json
+from app.workflow.inventory_review import approved_exception_ids
+from app.workflow.run import ArtifactRef, utc_now
+from app.workflow.states import RunState
+
+ARTIFACT = "SourceResolution"
+CURRENT = "SourceResolution.json"
+CACHE = "source_suggestions.json"
+SOURCE_STATES = (RunState.DATA_PROFILED,)
+
+
+def _request_key(user: str) -> str:
+    return hashlib.sha256(f"{SYSTEM_PROMPT}\n{user}".encode("utf-8")).hexdigest()
+
+
+def _saved_answer(run_dir: Path, key: str) -> str | None:
+    try:
+        saved = json.loads((run_dir / CACHE).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return saved.get("response") if isinstance(saved, dict) and saved.get("key") == key else None
+
+
+def resolve_sources(store: RunStore, runs_root: Path, run_id: str, llm: SourceLlm) -> SourceResolution:
+    """Resolve the run's entities and KPI needs to tables and columns."""
+    run = store.get(run_id)
+    if run.state not in SOURCE_STATES:
+        raise WrongState("Resolving sources", run.state, SOURCE_STATES)
+    inventory = load_inventory(runs_root, run_id)  # 404 NOT_FOUND before a harvest
+    contract = load_current_contract(runs_root, run_id)
+    if contract is None:
+        raise NotFound("The run has no business contract yet")
+    glossary = load_glossary()  # CONFIG_ERROR before any model call
+    conformed = load_conformed()
+    exceptions = approved_exception_ids(store, runs_root, run_id)
+
+    run_dir = Path(runs_root) / run_id
+    suggestions = Suggestions()
+    if contract.entities or contract.kpis:
+        user = json.dumps(build_payload(contract, inventory, glossary.terms), sort_keys=True)
+        key = _request_key(user)
+        raw = _saved_answer(run_dir, key)
+        if raw is None:
+            raw = llm(SYSTEM_PROMPT, user, llm_schema())
+        suggestions = parse_suggestions(raw, contract, inventory)  # unusable output isn't kept
+        write_json(run_dir / CACHE, {"key": key, "response": raw})
+
+    entities, kpi_fields = resolve(contract, inventory, glossary, conformed, exceptions, suggestions)
+
+    based_on = {
+        name: run.artifacts[name].hash
+        for name in (CONTRACT_ARTIFACT, INVENTORY_ARTIFACT)
+        if name in run.artifacts
+    }
+    previous = run.artifacts.get(ARTIFACT)
+    current = run_dir / CURRENT
+    if previous is not None and current.is_file():
+        old = SourceResolution.model_validate_json(current.read_text(encoding="utf-8"))
+        same = (
+            old.based_on == based_on
+            and old.entities == entities
+            and old.kpi_fields == kpi_fields
+        )
+        if same:
+            return old
+        version = max(old.version, previous.version) + 1
+    else:
+        version = 1
+
+    result = SourceResolution(
+        schema_version=SCHEMA_VERSION,
+        run_id=run_id,
+        version=version,
+        based_on=based_on,
+        entities=entities,
+        kpi_fields=kpi_fields,
+    )
+    data = result.to_dict()
+    write_json(run_dir / "resolutions" / f"SourceResolution.v{version}.json", data)
+    write_json(current, data)
+    run.artifacts[ARTIFACT] = ArtifactRef(
+        path=CURRENT,
+        version=version,
+        hash=canonical_hash(data),
+        status="draft",
+        based_on=based_on,
+        updated_at=utc_now(),
+    )
+    store.save(run)
+    return result

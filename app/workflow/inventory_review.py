@@ -58,13 +58,18 @@ def _table_names(inventory: MetadataInventory, contract) -> tuple[list[str], lis
     return candidate_tables(contract, inventory), candidate_error_tables(contract, inventory)
 
 
-def approved_exceptions(store: RunStore, runs_root: Path, run_id: str) -> set[str]:
-    """Lower-cased tables with an approved exception."""
+def approved_exception_ids(store: RunStore, runs_root: Path, run_id: str) -> dict[str, str]:
+    """Lower-cased table -> approval id of its (latest) approved exception."""
     return {
-        r.artifact[len(EXCEPTION_PREFIX):].lower()
+        r.artifact[len(EXCEPTION_PREFIX):].lower(): r.approval_id
         for r in list_approvals(store, runs_root, run_id)
         if r.artifact.startswith(EXCEPTION_PREFIX) and r.action is Action.ACCEPT
     }
+
+
+def approved_exceptions(store: RunStore, runs_root: Path, run_id: str) -> set[str]:
+    """Lower-cased tables with an approved exception."""
+    return set(approved_exception_ids(store, runs_root, run_id))
 
 
 def _inventory_ref(run: Run):

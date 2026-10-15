@@ -1,28 +1,8 @@
 
 from typing import Any
 
+from app.discovery.glossary import load_glossary, normalize  # noqa: F401  (normalize is re-exported)
 from app.llm.requirement_analyzer import RequirementSpec
-
-
-# Business terms and their common database naming variations.
-ALIASES = {
-    "sales": ["sales", "salesorder", "salesorderdetail", "synthetic_sales_daily"],
-    "total sales": ["total_sales", "linetotal", "totalsales"],
-    "products": ["product", "products"],
-    "customers": ["customer", "customers"],
-    "product name": ["product.name", "productname"],
-    "customer name": [
-        "customer.name",
-        "customer.firstname",
-        "customer.lastname",
-        "customername",
-    ],
-}
-
-
-def normalize(value: str) -> str:
-    """Normalize names for comparison."""
-    return "".join(char.lower() for char in value if char.isalnum())
 
 
 def match_requirements_to_data(
@@ -31,6 +11,7 @@ def match_requirements_to_data(
 ) -> dict[str, Any]:
     """Match business concepts to real Fabric metadata."""
 
+    glossary = load_glossary()
     available = []
 
     for table in metadata_inventory.get("tables", []):
@@ -64,10 +45,7 @@ def match_requirements_to_data(
 
     for item in requested_items:
         requested = item["name"]
-        key = normalize(requested)
-
-        aliases = ALIASES.get(key, [key])
-        aliases = [normalize(alias) for alias in aliases]
+        aliases = glossary.aliases_for(requested)
 
         candidates = []
 
