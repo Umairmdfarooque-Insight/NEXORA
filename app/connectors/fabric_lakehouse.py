@@ -2,8 +2,8 @@
 from urllib.parse import quote
 
 import requests
-from azure.identity import InteractiveBrowserCredential
 
+from app.auth import STORAGE_SCOPE, get_token
 from app.config import (
     FABRIC_WORKSPACE_ID,
     FABRIC_LAKEHOUSE_ID,
@@ -14,13 +14,8 @@ ONELAKE_TABLE_API = "https://onelake.table.fabric.microsoft.com/delta"
 
 
 class FabricLakehouseConnector:
-    def __init__(self) -> None:
-        self.credential = InteractiveBrowserCredential()
-
     def _get_headers(self) -> dict:
-        token = self.credential.get_token(
-            "https://storage.azure.com/.default"
-        ).token
+        token = get_token(STORAGE_SCOPE)
 
         return {
             "Authorization": f"Bearer {token}",
