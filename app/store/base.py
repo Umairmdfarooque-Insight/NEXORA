@@ -33,7 +33,10 @@ class RunStore(Protocol):
         subject_area: str | None = None,
         desired_outputs=(),
         constraints=(),
-    ) -> Run: ...
+        created_by: dict | None = None,
+    ) -> Run:
+        """`created_by` is {oid, upn, name}; its upn becomes the history actor."""
+        ...
 
     def get(self, run_id: str) -> Run:
         """Raises RunNotFound or RunCorrupt."""

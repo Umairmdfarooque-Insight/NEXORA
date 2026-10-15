@@ -117,6 +117,9 @@ export default function RunDetailPage() {
           <div className={styles.titleRow}>
             <Title2 as="h1">Run</Title2>
             <span className={styles.runId}>{run.run_id}</span>
+            <Caption1 className={styles.label}>
+              Created by: {run.created_by?.upn ?? "unknown"}
+            </Caption1>
             <Button size="small" onClick={load} disabled={loading}>
               Refresh
             </Button>

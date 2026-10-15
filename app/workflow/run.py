@@ -96,16 +96,19 @@ def new_run(
     subject_area: str | None = None,
     desired_outputs=(),
     constraints=(),
-    actor: str = "system",
+    created_by: dict[str, Any] | None = None,
 ) -> Run:
+    """A new CREATED run. `created_by` is {oid, upn, name}; its upn is the actor."""
     prompt = validate_prompt(prompt)
     now = utc_now()
+    actor = created_by["upn"] if created_by else "system"
     return Run(
         run_id=str(uuid.uuid4()),
         prompt=prompt,
         subject_area=subject_area,
         desired_outputs=list(desired_outputs),
         constraints=list(constraints),
+        created_by=created_by,
         created_at=now,
         updated_at=now,
         history=[

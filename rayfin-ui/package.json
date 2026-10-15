@@ -10,6 +10,8 @@
     "test": "node --test \"src/lib/**/*.test.ts\""
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.25.1",
+    "@azure/msal-react": "^5.7.2",
     "@fluentui/react-components": "^9.74.9",
     "next": "^16.4.1",
     "react": "^19.3.1",

@@ -112,6 +112,7 @@ export default function NewRunPage() {
     }
   }
 
+  const noWorkspaces = workspaces !== null && workspaces.length === 0;
   const noLakehouses = lakehouses !== null && lakehouses.length === 0;
   const scopeIncomplete =
     workspaceId !== "" && (loadingLakehouses || noLakehouses || lakehouseId === "");
@@ -256,8 +257,15 @@ export default function NewRunPage() {
 
         <Field
           label="Workspace"
-          validationState={fieldErrors.workspace_id ? "error" : "none"}
-          validationMessage={fieldErrors.workspace_id}
+          validationState={
+            fieldErrors.workspace_id ? "error" : noWorkspaces ? "warning" : "none"
+          }
+          validationMessage={
+            fieldErrors.workspace_id ||
+            (noWorkspaces
+              ? "You don't have access to any Fabric workspace"
+              : undefined)
+          }
           hint={loadingWorkspaces ? "Loading workspaces…" : undefined}
         >
           <Dropdown
@@ -265,7 +273,7 @@ export default function NewRunPage() {
             placeholder={workspaces === null ? "Workspaces unavailable" : "Select a workspace"}
             value={workspaceName}
             selectedOptions={workspaceId ? [workspaceId] : []}
-            disabled={loadingWorkspaces || workspaces === null || submitting}
+            disabled={loadingWorkspaces || !workspaces?.length || submitting}
             onOptionSelect={(_, data) => {
               if (data.optionValue) void chooseWorkspace(data.optionValue);
             }}

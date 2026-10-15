@@ -263,12 +263,15 @@ The API is unauthenticated and acts with the developer's own credential, so anyo
   - `nexora-api`: exposes the scope `api://<api-client-id>/access_as_user`, and has delegated Fabric permissions for OBO.
 - API settings, added to `.env.example` with empty values: `ENTRA_TENANT_ID`, `ENTRA_API_CLIENT_ID`, `ENTRA_API_CLIENT_SECRET` (moved to Key Vault in T-705).
 - UI settings: `NEXT_PUBLIC_ENTRA_TENANT_ID`, `NEXT_PUBLIC_ENTRA_CLIENT_ID`, `NEXT_PUBLIC_API_SCOPE`.
-- Every endpoint except `GET /health` requires `Authorization: Bearer <token>`.
+- Every endpoint except `GET /health` requires `Authorization: Bearer <token>`. (Swagger's `/docs` and `/openapi.json` stay readable; `/docs` has an **Authorize** button for pasting a token.)
+- The API accepts v1 and v2 tokens for the tenant (issuer `https://sts.windows.net/<tenant>/` or `https://login.microsoftonline.com/<tenant>/v2.0`) and the audience `<api-client-id>` or `api://<api-client-id>`, because the issued version depends on the API registration's `accessTokenAcceptedVersion`.
+- `nexora-api` also needs a delegated **Azure Storage `user_impersonation`** permission, because the OneLake schema check (T-103) runs as the user too, not only the Fabric REST calls.
+- `RunStore.create(…, created_by=None)` takes the principal; its `upn` becomes the first history `actor`. Runs created through the CLI keep `created_by: null` and actor `system`.
 - The validated principal is `{oid, upn, name}`. FastAPI handlers receive it through `Depends(current_user)`.
 
 #### Constraints
 - Validate the token's signature (tenant JWKS, cached), issuer, audience (`ENTRA_API_CLIENT_ID`), expiry and the `access_as_user` scope.
-- No bypass flag. The CLI keeps working because it calls the store directly, not the API.
+- No bypass flag. The CLI keeps working because it calls the store directly, not the API. If `ENTRA_TENANT_ID` or `ENTRA_API_CLIENT_ID` is missing, protected endpoints fail with `500 CONFIG_ERROR` instead of letting requests through; a missing `ENTRA_API_CLIENT_SECRET` fails the same way on the endpoints that call Fabric.
 - Never log tokens.
 
 #### Edge cases and error handling

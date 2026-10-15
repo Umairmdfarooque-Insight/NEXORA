@@ -34,9 +34,14 @@ class FileRunStore:
         return True
 
     def create(
-        self, prompt, subject_area=None, desired_outputs=(), constraints=()
+        self,
+        prompt,
+        subject_area=None,
+        desired_outputs=(),
+        constraints=(),
+        created_by=None,
     ) -> Run:
-        run = new_run(prompt, subject_area, desired_outputs, constraints)
+        run = new_run(prompt, subject_area, desired_outputs, constraints, created_by)
         self.save(run)
         return run
 

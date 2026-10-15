@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import get_store
 from app.api.main import app
+from app.api.security import AuthContext, Principal, authenticate
 from app.store.file_store import FileRunStore
 from app.workflow.next_action import NEXT_ACTION
 from app.workflow.run import ArtifactRef
@@ -36,6 +37,14 @@ def is_envelope(response, status: int, code: str) -> bool:
     )
 
 
+TEST_USER = Principal(oid="oid-1", upn="tester@contoso.com", name="Tester")
+
+
+def fake_authenticate() -> AuthContext:
+    """Stands in for token validation; T-105's own checks cover the real thing."""
+    return AuthContext(principal=TEST_USER, token="test-token")
+
+
 class BrokenStore:
     def list(self, *args, **kwargs):
         raise RuntimeError("secret internal detail")
@@ -45,6 +54,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         store = FileRunStore(Path(tmp) / "runs")
         app.dependency_overrides[get_store] = lambda: store
+        app.dependency_overrides[authenticate] = fake_authenticate
         client = TestClient(app)
 
         # --- Health ---

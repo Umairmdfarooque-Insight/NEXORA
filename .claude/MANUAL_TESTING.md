@@ -75,6 +75,8 @@ Steps 1–7 and 11, 13 and 14 run offline with the file store (`RUN_STORE=file`,
 
 ### T-102 — Orchestration API skeleton
 
+> **Since T-105 every call except `/health` needs a bearer token.** In Swagger click **Authorize** and paste one; with curl add `-H "Authorization: Bearer <token>"`. See "Getting a token for curl or Swagger" in the T-105 section. Without a token you get HTTP 401.
+
 Start the API in one terminal (leave it running): `uvicorn app.api.main:app --reload --port 8000`. It uses the store from `RUN_STORE` (default `file`). In a second terminal use the commands below, or the Swagger page at <http://localhost:8000/docs>. In PowerShell use `curl.exe` (plain `curl` is an alias for something else).
 
 1. 💻 **Health.** `curl.exe http://localhost:8000/health`. **Expected:** `{"status":"ok","app":"Nexora","version":"<git sha or 0.0.0>"}`.
@@ -97,6 +99,8 @@ Start the API in one terminal (leave it running): `uvicorn app.api.main:app --re
 
 ### T-103 — Workspace and Lakehouse selection
 
+> **Since T-105 every call except `/health` needs a bearer token.** In Swagger click **Authorize** and paste one; with curl add `-H "Authorization: Bearer <token>"`. See "Getting a token for curl or Swagger" in the T-105 section. Without a token you get HTTP 401.
+
 Start the API in one terminal (leave it running): `uvicorn app.api.main:app --reload --port 8000`. The first call that reaches Fabric opens a browser sign-in in that terminal's process. Use `curl.exe` (not `curl`) in PowerShell, or the Swagger page at <http://localhost:8000/docs>. Create a run first: `curl.exe -X POST http://localhost:8000/runs -H "Content-Type: application/json" -d "{\"prompt\":\"Total sales by month\"}"`, and note its `run_id`. Use the sandbox workspace.
 
 1. 🌐 **Workspaces match the portal.** `curl.exe http://localhost:8000/fabric/workspaces`. **Expected:** a list of `{"id","display_name","type"}` that matches the workspaces you see in the Fabric portal. Note the sandbox workspace `id`.
@@ -114,6 +118,8 @@ Start the API in one terminal (leave it running): `uvicorn app.api.main:app --re
 ---
 
 ### T-104 — Rayfin UI shell
+
+> **Since T-105 the UI signs you in first.** Set the `NEXT_PUBLIC_ENTRA_*` values (see the T-105 setup) before these steps; the pages open after you sign in with Microsoft.
 
 Needs Node.js 20 or later (checked with 24) and two terminals. Run the API from the project root, and the UI from `rayfin-ui\`. Steps 1 and 10 need the live Fabric sign-in; the rest work with no Fabric access (the workspace list just stays empty).
 
@@ -137,9 +143,45 @@ Needs Node.js 20 or later (checked with 24) and two terminals. Run the API from 
 
 ---
 
-## M1 onward
+### T-105 — Entra authentication
 
-Sections for T-105 and later are added when each task is implemented.
+**One-time Entra setup** (an admin or app owner does this in the Azure portal, Microsoft Entra ID, *App registrations*). Use a tenant where you can test with at least two users.
+
+1. **`nexora-api` registration.**
+   - *New registration*, single tenant, no redirect URI. Note the **Application (client) ID** and **Directory (tenant) ID**.
+   - *Expose an API*: set the Application ID URI to `api://<api-client-id>`, then *Add a scope* named `access_as_user` (who can consent: Admins and users).
+   - *Certificates & secrets*: create a client secret and copy its **value** now.
+   - *API permissions* → *Add a permission* → *Delegated*: **Power BI Service** (this is Fabric): `Workspace.Read.All` and `Lakehouse.Read.All` (or `Item.Read.All`); and **Azure Storage**: `user_impersonation`. Grant admin consent if you can.
+2. **`rayfin-ui` registration.**
+   - *New registration*, single tenant. Note its **Application (client) ID**.
+   - *Authentication* → *Add a platform* → **Single-page application**, redirect URI `http://localhost:3000`.
+   - *API permissions* → *My APIs* → `nexora-api` → delegated `access_as_user`.
+3. **Let users consent once.** Easiest: on `nexora-api` → *Manifest*, add the `rayfin-ui` client ID to `knownClientApplications`, or grant admin consent for both apps. Without it, users get the `CONSENT_REQUIRED` message in step 8.
+4. **Fill in the settings** (names are in `.env.example` and `rayfin-ui/.env.local.example`; never paste the values into chat or commit them):
+   - `.env`: `ENTRA_TENANT_ID`, `ENTRA_API_CLIENT_ID` (the `nexora-api` client ID), `ENTRA_API_CLIENT_SECRET`.
+   - `rayfin-ui/.env.local`: `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000`, `NEXT_PUBLIC_ENTRA_TENANT_ID`, `NEXT_PUBLIC_ENTRA_CLIENT_ID` (the `rayfin-ui` client ID), `NEXT_PUBLIC_API_SCOPE=api://<api-client-id>/access_as_user`.
+5. **Install and start.** `pip install -r requirements.txt` (adds `PyJWT[crypto]` and `msal`). Terminal 1: `.venv\Scripts\activate; uvicorn app.api.main:app --port 8000`. Terminal 2: `cd rayfin-ui; npm install; npm run dev` (restart it after editing `.env.local`).
+
+**Getting a token for curl or Swagger** (needed for the T-102 and T-103 steps from now on): sign in to <http://localhost:3000>, open the browser dev tools (F12) → *Network*, click any request to `localhost:8000`, and copy the part of the `Authorization` request header after `Bearer `. It is valid for about an hour. In Swagger (<http://localhost:8000/docs>) click **Authorize** and paste it; for curl use `-H "Authorization: Bearer <token>"`. Treat it like a password.
+
+1. 🌐 **Sign-in required.** Open <http://localhost:3000> in a private (InPrivate/Incognito) window. **Expected:** you are redirected to the Microsoft sign-in page, and after signing in you land on `/runs`. The header shows your name and **Sign out**.
+2. 🌐 **Attribution.** Create a run on `/runs/new`. **Expected:** the run detail page shows **Created by: \<your UPN\>**. Then `python -m app.cli runs show <run_id>`: `created_by` holds your `oid`, `upn` and `name`, and the first `history` entry's `actor` is your UPN.
+3. 💻 **API rejects anonymous calls.** `curl.exe -i http://localhost:8000/runs`. **Expected:** HTTP 401 and `"code":"UNAUTHENTICATED"`, with a `www-authenticate: Bearer` header. Also `curl.exe -i -X POST http://localhost:8000/runs -H "Content-Type: application/json" -d "{\"prompt\":\"x\"}"` (401) and `curl.exe -i http://localhost:8000/runs -H "Authorization: Bearer abc.def.ghi"` (401, "The access token is not valid").
+4. 💻 **Health stays open.** `curl.exe http://localhost:8000/health`. **Expected:** HTTP 200 with no token.
+5. 🌐 **Valid token works.** `curl.exe -i http://localhost:8000/runs -H "Authorization: Bearer <token>"`. **Expected:** HTTP 200 with the run list.
+6. 🌐 **Per-user resources.** Sign in (private window) as a second test user who can see fewer Fabric workspaces. **Expected:** the workspace dropdown on `/runs/new` lists only that user's workspaces. A user with none sees "You don't have access to any Fabric workspace".
+7. 🌐 **M1 exit.** As an authenticated user, create a run with a workspace and Lakehouse, and open its detail page. **Expected:** it works end to end without Swagger or the CLI, and the page shows the scope and "Created by".
+8. 🌐 **Consent (optional).** Sign in as a user who hasn't consented and has no admin consent behind the app, then pick a workspace. **Expected:** a red banner with the `CONSENT_REQUIRED` message telling the user to consent, not a crash.
+9. 💻 **Fails closed when not configured.** In `.env` blank `ENTRA_TENANT_ID`, restart the API, and run `curl.exe -i http://localhost:8000/runs -H "Authorization: Bearer abc.def.ghi"`. **Expected:** HTTP 500, `"code":"CONFIG_ERROR"`, naming `ENTRA_TENANT_ID`; `/health` is still 200. **Restore the value.** In `rayfin-ui/.env.local` blank `NEXT_PUBLIC_ENTRA_CLIENT_ID`, restart the UI, and open the site. **Expected:** "Sign-in is not configured" naming the setting, with no way to use the app. **Restore it.**
+10. 💻 **CLI still works.** `python -m app.cli runs list`. **Expected:** the runs are listed with no sign-in (the CLI calls the store directly).
+11. 💻 **Offline checks.** `python -m app.manual_tests.t105_offline_checks`, then `cd rayfin-ui; npm test; npm run typecheck; npm run build`. **Expected:** `All checks passed.`, 11 passing tests, no type errors and a successful build. These cover token validation (expiry, audience, issuer, tenant, scope, forged tokens), OBO errors, attribution, the auth gate on every endpoint, and the silent refresh-and-retry in the UI client.
+12. 💻 **Clean up.** Stop both servers, and delete the `runs\` folder if it was only test data.
+
+---
+
+## M2 onward
+
+Sections for T-201 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -152,6 +194,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t102_offline_checks.py` | T-102 | In-process checks of the API endpoints, error envelope and CORS |
 | `app/manual_tests/t103_offline_checks.py` | T-103 | Fake-Fabric checks of the Fabric client, scope binding and scope locking |
 | `app/manual_tests/t103_connectors_check.py` | T-103 | Live check that scope-based connectors reach the Lakehouse and its SQL endpoint |
+| `app/manual_tests/t105_offline_checks.py` | T-105 | Throwaway-key JWT checks of token validation, OBO, attribution and the auth gate |
 
 ## Adding a task
 

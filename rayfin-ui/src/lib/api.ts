@@ -52,13 +52,45 @@ function fieldMessages(details: unknown): Record<string, string> {
   return fields;
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
+/**
+ * Returns an access token for the API, or null when sign-in isn't in use.
+ * `forceRefresh` asks for a fresh token instead of a cached one.
+ */
+export type TokenProvider = (forceRefresh: boolean) => Promise<string | null>;
+
+let tokenProvider: TokenProvider | null = null;
+
+export function setTokenProvider(provider: TokenProvider | null): void {
+  tokenProvider = provider;
+}
+
+async function fetchOnce(
+  path: string,
+  init: RequestInit | undefined,
+  forceRefresh: boolean,
+): Promise<Response> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  if (tokenProvider) {
+    let token: string | null;
+    try {
+      token = await tokenProvider(forceRefresh);
+    } catch {
+      throw new ApiError(
+        401,
+        "UNAUTHENTICATED",
+        "Your session has expired. Reload the page to sign in again.",
+      );
+    }
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  }
+
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers: { "Content-Type": "application/json", ...init?.headers },
-    });
+    return await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
   } catch {
     throw new ApiError(
       0,
@@ -66,11 +98,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       `Can't reach the Nexora API at ${API_BASE_URL}. Check that it is running.`,
     );
   }
+}
 
-  if (response.ok) {
-    return (await response.json()) as T;
-  }
-
+async function readError(response: Response): Promise<ApiError> {
   let body: { error?: { code?: string; message?: string; details?: unknown } } | null =
     null;
   try {
@@ -79,12 +109,28 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     // Not JSON: fall through to the generic message.
   }
   const error = body?.error;
-  throw new ApiError(
+  return new ApiError(
     response.status,
     error?.code ?? "UNKNOWN",
     error?.message ?? `The API returned HTTP ${response.status}.`,
     fieldMessages(error?.details),
   );
+}
+
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  let response = await fetchOnce(path, init, false);
+  let error = response.ok ? null : await readError(response);
+
+  // An expired token is refreshed silently and the call is retried once.
+  if (error?.code === "TOKEN_EXPIRED" && tokenProvider) {
+    response = await fetchOnce(path, init, true);
+    error = response.ok ? null : await readError(response);
+  }
+
+  if (error) {
+    throw error;
+  }
+  return (await response.json()) as T;
 }
 
 export const api = {
