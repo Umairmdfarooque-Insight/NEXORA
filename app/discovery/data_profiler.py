@@ -98,21 +98,33 @@ def classify_error(exc: Exception) -> tuple[str, str]:
     return "QUERY_FAILED", f"The profiling query failed (SQLSTATE {state if len(state) == 5 else 'unknown'})"
 
 
-def candidate_tables(contract: Any, inventory: MetadataInventory) -> list[str]:
-    """Tables ("schema.table") whose names match a contract entity, using the matcher's
-    ALIASES and name normalization. Deterministic; no LLM."""
+def matching_keys(contract: Any, keys: list[str]) -> list[str]:
+    """The "schema.table" names in `keys` whose table part matches a contract entity, using
+    the matcher's ALIASES and name normalization. Deterministic; no LLM."""
     if contract is None:
         return []
     found: list[str] = []
     for entity in contract.entities:
         aliases = ALIASES.get(entity.strip().lower()) or ALIASES.get(normalize(entity)) or [entity]
         aliases = [a for a in (normalize(a) for a in aliases) if a]
-        for table in inventory.tables:
-            name = normalize(table.table_name)
-            key = table_key(table)
+        for key in keys:
+            name = normalize(key.partition(".")[2])
             if key not in found and any(alias in name for alias in aliases):
                 found.append(key)
     return found
+
+
+def candidate_tables(contract: Any, inventory: MetadataInventory) -> list[str]:
+    """Harvested tables ("schema.table") that match a contract entity."""
+    return matching_keys(contract, [table_key(t) for t in inventory.tables])
+
+
+def candidate_error_tables(contract: Any, inventory: MetadataInventory) -> list[str]:
+    """Tables that match a contract entity but failed to harvest (so they aren't in
+    `inventory.tables`). Gate G2 must not pass over them silently."""
+    harvested = {table_key(t).lower() for t in inventory.tables}
+    failed = sorted({e.table for e in inventory.errors if e.table.lower() not in harvested})
+    return matching_keys(contract, failed)
 
 
 def _freshness_column(table: InventoryTable) -> InventoryColumn | None:

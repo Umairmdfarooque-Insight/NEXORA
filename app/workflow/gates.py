@@ -92,6 +92,80 @@ def run_g1(contract: bc.BusinessContract, artifact_hash: str) -> GateResult:
     )
 
 
+def run_g2(
+    inventory,
+    artifact_hash: str,
+    candidates: list[str],
+    failed_to_harvest: list[str],
+    conformed: frozenset[str],
+    excepted: set[str],
+) -> GateResult:
+    """Gate G2 (spec §12): is the metadata inventory fit for planning?
+
+    `candidates` are the harvested tables that match the contract; `failed_to_harvest` are
+    matching tables that couldn't be read. `conformed` and `excepted` hold lower-cased
+    "schema.table" names. Deterministic code only.
+    """
+    by_key = {f"{t.schema_name}.{t.table_name}": t for t in inventory.tables}
+    everything = [*candidates, *failed_to_harvest]
+
+    inaccessible: dict[str, list[str]] = {}
+    for error in inventory.errors:
+        if error.table in everything and error.code != "NO_COLUMNS":
+            inaccessible.setdefault(error.table, []).append(error.code)
+    for key in candidates:
+        profile = by_key[key].profile
+        if profile is not None and profile.status == "error":
+            inaccessible.setdefault(key, []).append(profile.code or "PROFILE_ERROR")
+
+    no_columns = [
+        k for k in candidates if not by_key[k].columns or any(c.data_type is None for c in by_key[k].columns)
+    ]
+    unprofiled = [k for k in candidates if by_key[k].profile is None]
+    warned = {
+        k: by_key[k].profile.warnings
+        for k in candidates
+        if by_key[k].profile is not None and by_key[k].profile.status == "warning"
+    }
+    exceptions_needed = [k for k in everything if k.lower() not in conformed and k.lower() not in excepted]
+
+    description = "Every candidate table is accessible, with no table errors"
+    if not everything:
+        accessible = _check(
+            "G2.1",
+            description,
+            False,
+            {"reason": "no candidate tables matched the contract", "candidates": []},
+        )
+    else:
+        accessible = _check(
+            "G2.1", description, not inaccessible, {"errors": inaccessible, "candidates": everything}
+        )
+    checks = [
+        accessible,
+        _check("G2.2", "Every candidate has columns and types", not no_columns, {"tables": no_columns}),
+        _check("G2.3", "Every candidate has a profile", not unprofiled, {"tables": unprofiled}),
+        _check("G2.4", "Profile warnings are summarized", not warned, {"warnings": warned}, failed="warning"),
+        _check(
+            "G2.5",
+            "Each non-conformed candidate has an approved exception",
+            not exceptions_needed,
+            {
+                "missing_exceptions": exceptions_needed,
+                "excepted": sorted(k for k in everything if k.lower() in excepted),
+            },
+        ),
+    ]
+    return GateResult(
+        gate="G2",
+        artifact="MetadataInventory",
+        artifact_hash=artifact_hash,
+        passed=not any(c.status == "fail" for c in checks),
+        checked_at=utc_now(),
+        checks=checks,
+    )
+
+
 def save_gate_result(runs_root: Path, run_id: str, result: GateResult) -> str:
     """Write runs/<id>/gates/<gate>-<timestamp>.json. Returns the path relative to the run."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")

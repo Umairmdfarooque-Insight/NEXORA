@@ -22,7 +22,10 @@ from app.api.schemas import (
     ArtifactItem,
     CompileResponse,
     CreateRunRequest,
+    DataGapRequest,
     DismissRequest,
+    ExceptionRequest,
+    ExceptionResponse,
     HarvestRequest,
     HarvestResponse,
     HarvestSummary,
@@ -49,6 +52,12 @@ from app.workflow.clarification import (
 from app.workflow.compile_stage import compile_run, current_contract, open_questions
 from app.contracts.metadata_inventory import MetadataInventory
 from app.workflow.gates import GateResult
+from app.workflow.inventory_review import (
+    add_exception,
+    check_g2,
+    list_data_gaps,
+    raise_data_gap,
+)
 from app.workflow.harvest_stage import ARTIFACT as INVENTORY, harvest_run, load_inventory, summary
 from app.contracts.metadata_inventory import RelationshipEvidence
 from app.discovery.relationship_candidates import Candidate
@@ -69,6 +78,7 @@ def detail(run, runs_root: Path, warnings: list[str] | None = None) -> RunDetail
         warnings,
         open_questions=open_questions(runs_root, run.run_id),
         contract=current_contract(runs_root, run.run_id),
+        data_gaps=list_data_gaps(runs_root, run.run_id),
     )
 
 
@@ -186,9 +196,11 @@ def check_gate(
     store: RunStore = Depends(get_store),
     runs_root: Path = Depends(get_runs_root),
 ):
-    if gate != "G1":
-        raise NotFound(f"No gate {gate!r}; only G1 is available")
-    return check_g1(store, runs_root, run_id)
+    if gate == "G1":
+        return check_g1(store, runs_root, run_id)
+    if gate == "G2":
+        return check_g2(store, runs_root, run_id)
+    raise NotFound(f"No gate {gate!r}; only G1 and G2 are available")
 
 
 @router.post("/{run_id}/approvals", response_model=ApprovalResponse)
@@ -227,6 +239,37 @@ def get_approvals(
     runs_root: Path = Depends(get_runs_root),
 ):
     return list_approvals(store, runs_root, run_id)
+
+
+@router.post("/{run_id}/exceptions", status_code=201, response_model=ExceptionResponse)
+def approve_exception(
+    run_id: str,
+    body: ExceptionRequest,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    user: Principal = Depends(current_user),
+):
+    record = add_exception(
+        store, runs_root, run_id, {"oid": user.oid, "upn": user.upn}, body.table, body.rationale
+    )
+    return ExceptionResponse(
+        exception_id=record.approval_id,
+        table=record.artifact.split(":", 1)[1],
+        approved_by=record.user["upn"],
+        at=record.at,
+    )
+
+
+@router.post("/{run_id}/data-gaps", response_model=RunDetail)
+def raise_gap(
+    run_id: str,
+    body: DataGapRequest,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    user: Principal = Depends(current_user),
+):
+    run = raise_data_gap(store, runs_root, run_id, body.description, user.upn)
+    return detail(run, runs_root)
 
 
 @router.put("/{run_id}/scope", response_model=RunDetail)

@@ -274,7 +274,7 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 4. 🌐 **Stale version.** Open the contract page of a draft run in two browser tabs. In tab 1 click **Edit** on a KPI, change **Currency** and **Save**. In tab 2 (not reloaded) click **Regenerate**, **Explain** or **Accept**. **Expected:** tab 2 shows the warning "The contract changed. Reload to see the latest version. Nothing was changed.", with a **Reload** button, and no approval record is added. After **Reload** the new currency shows.
 5. 🌐 **M2 exit.** Using only Rayfin, produce an approved contract (step 1). **Expected:** the contract page shows "Approved and locked", the Edit, Accept, Reject and Regenerate controls are gone (Explain remains), and `python -m app.cli contract validate runs\<run_id>\BusinessContract.yaml` prints `VALID` with `status: approved` in the file.
 6. 🌐 **Other behaviour.** (a) With the API stopped, type an answer and click **Submit answer**. **Expected:** an error banner "Couldn't send your answer. What you typed is kept." with **Retry**, and the typed text is still in the box. Start the API and click **Retry**: the answer goes through. (b) Dismiss a non-blocking question with a reason. **Expected:** it disappears from the open list. (c) **Reject** is disabled until the comment box has text; with `Exclude tax as well` the run returns to `NEEDS_CLARIFICATION` and shows a blocking question with that text. (d) A very long answer or rationale shows **Show more / Show less**.
-7. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `pass 18`, `fail 0` (includes the Accept rules, the stale message and long-text collapsing). `npm run typecheck` and `npm run build` also finish without errors.
+7. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `fail 0` and no failing test (`pass 18` after T-205; later tasks add tests, T-304 brings it to 29), including the Accept rules, the stale message and long-text collapsing. `npm run typecheck` and `npm run build` also finish without errors.
 8. 💻 **API checks.** `python -m app.manual_tests.t205_offline_checks`. **Expected:** `All checks passed.` (`contract` and `artifacts` in the run detail, `GET /me` with roles).
 9. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API and UI, and delete the test runs' folders under `runs\`.
 
@@ -334,9 +334,29 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+### T-304 — Gate G2 and inventory UI
+
+**Before you start:** same setup as T-302 and T-303 (token in Swagger, API running with `uvicorn app.api.main:app --reload --port 8000`, SQL consent). Open `config\roles.yaml` and put **your own UPN** in the `data_engineer` list in place of `user@contoso.com` (restore it afterwards; it is the only role needed here). Start the UI (`cd rayfin-ui; npm install; npm run dev`) and sign in at <http://localhost:3000>. You need runs that are `REQUIREMENT_APPROVED` (create, compile, answer and Accept the contract as in T-205). Give run A the prompt `Show total sales by product` (its entities should include Products), bind it to `saleslt` and scope run B to `saleslt` and `nexora_test`. The tables the gate looks at are the ones whose names match the contract's entities (for example `Products` matches `SalesLT_Product` and `dim_product_dupes`).
+
+1. 🌐 **Pass on conformed data.** Open `http://localhost:3000/runs/<run_A>/inventory`. Click **Harvest**, then **Profile candidates**. **Expected:** the **Gate G2 checklist** shows `G2.1`, `G2.2`, `G2.3` and `G2.5` as **Pass** (`G2.4` is **Pass** or an amber **Warning**), and the Accept note is gone. Click **Accept**. **Expected:** the summary shows the state `DATA_PROFILED` and the badge **Accepted**; `runs\<run_A>\approvals.jsonl` ends with an `ACCEPT` record for `MetadataInventory` with your UPN, role `data_engineer` and a `gate_result_ref`; `runs\<run_A>\gates\` holds `G2-*.json`. Via Swagger the same is `POST /runs/{run_A}/gates/G2/check` then `POST /runs/{run_A}/approvals` with `{"artifact": "MetadataInventory", "action": "ACCEPT", "expected_hash": "<hash of MetadataInventory from GET /runs/{run_A}/artifacts>"}`.
+2. 🌐 **Exception required.** In `config\conformed_sources.yaml` delete the line `saleslt.SalesLT_Customer` (restore it afterwards), make sure the contract of run B has the entity `Customers`, harvest and profile run B, and click **Reload**. **Expected:** `G2.5` is **Fail** and names `saleslt.SalesLT_Customer`, **Accept** is disabled with "Gate G2 failed: G2.5.", and **Source exceptions** shows "saleslt.SalesLT_Customer is not a conformed source". If the contract has no `Customers` entity, use another table that matches a contract entity and remove that table from the file instead.
+3. 🌐 **Exception approved.** In **Source exceptions** type a rationale and click **Approve exception**. **Expected:** `G2.5` turns **Pass**, the exception is listed under "Approved exceptions" with your UPN and time, `GET /runs/{run_B}/approvals` has a record with `artifact: "Exception:saleslt.SalesLT_Customer"` and the rationale as `comment`, and **Accept** is available. With your UPN removed from `data_engineer` (use `[someone.else@contoso.com]`), the same call is `403 FORBIDDEN` and the UI says a data_engineer must approve it. An exception for a table that matches no contract entity, `POST /runs/{run_B}/exceptions` with `{"table": "saleslt.SalesLT_SalesOrderHeader", "rationale": "x"}` (any harvested table that matches no contract entity), gives `422`.
+4. 🌐 **Evidence visible.** On run B click **Analyze relationships**, find `nexora_test.dim_product_dupes` in **Tables** (use the search box) and click **Show columns**. **Expected:** the warning "ProductID is not unique (n duplicate values)"; click **Show evidence**. **Expected:** the ProductID numbers (rows, nulls, distinct, values appearing more than once) and the SQL that ran, for example the `GROUP BY [ProductID] HAVING COUNT(*) > 1` query. In **Relationship evidence**, **Show SQL** on any entry shows its queries, and entries into `dim_product_dupes` show `many_to_many` with the "not unique" note.
+5. 🌐 **Data gap.** On a run in `REQUIREMENT_APPROVED`, type "Warehouse stock data is not in the Lakehouse" under **Raise a data gap** and click **Raise data gap**. **Expected:** the state becomes `NEEDS_INPUT` ("Returns to REQUIREMENT_APPROVED when input is provided" on the run page), and the run page shows a **Data gap** message with the description. `GET /runs/{run_id}` has it under `data_gaps`.
+6. 🌐 **Search and paging.** On the inventory page, type `product` in **Search tables**. **Expected:** only matching tables are listed, with "n of m tables". If a harvest has more than 50 tables, **Previous** and **Next** page through them.
+7. 🌐 **Re-harvest after Accept.** On run A click **Re-harvest**. **Expected:** the state returns to `REQUIREMENT_APPROVED`, the inventory is version 2 and a **Draft**, profiles are gone, and `G2.3` fails until you profile again.
+8. 🌐 **M3 exit.** Using only Rayfin: Harvest, Profile candidates, Analyze relationships, then Accept. **Expected:** an accepted inventory exists for the run (`MetadataInventory.json`, status `approved`) and every table, column profile, warning and relationship is reviewable on the Inventory page.
+9. 💻 **Offline checks.** `python -m app.manual_tests.t304_offline_checks`. **Expected:** `All checks passed.` (G2.1-G2.5 incl. a candidate that failed to harvest or profile, no candidates, exceptions and roles, Accept with a stale hash and wrong state, re-harvest, data gaps, and the 404/409/422/500 cases).
+10. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `pass 29`, `fail 0`. `npm run typecheck` and `npm run build` also finish without errors, and the build lists `/runs/[id]/inventory`.
+11. 💻 **Clean up.** Restore `config\roles.yaml` and `config\conformed_sources.yaml` (`git checkout config/roles.yaml config/conformed_sources.yaml`), stop the API and UI, and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live and browser steps (1–8), which need your Entra sign-in, SQL consent and the real Lakehouse. Claude ran steps 9 and 10.
+
+---
+
 ## Next tasks
 
-Sections for T-304 and later are added when each task is implemented.
+Sections for T-401 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -358,6 +378,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t301_offline_checks.py` | T-301 | Fake-Lakehouse checks of the harvester, versioning and the harvest/inventory endpoints |
 | `app/manual_tests/t302_offline_checks.py` | T-302 | Fake-SQL-endpoint checks of the data profiler and the profile endpoint |
 | `app/manual_tests/t303_offline_checks.py` | T-303 | Fake-SQL-and-LLM checks of relationship candidates, evidence, rejections and the endpoints |
+| `app/manual_tests/t304_offline_checks.py` | T-304 | Checks of Gate G2, exceptions, Accept of the inventory and data gaps |
 
 ## Adding a task
 

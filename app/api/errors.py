@@ -31,10 +31,17 @@ from app.llm.errors import (
     LlmUpstreamError,
     PromptRejected,
 )
-from app.workflow.approval import AlreadyApproved, Forbidden, GateFailed, UnknownArtifact
+from app.workflow.approval import (
+    AlreadyApproved,
+    Forbidden,
+    GateFailed,
+    UnknownArtifact,
+    UnsupportedAction,
+)
 from app.workflow.clarification import ContractLocked, NotFound, QuestionConflict, StaleVersion
 from app.workflow.compile_stage import WrongState
 from app.workflow.harvest_stage import ScopeMissing
+from app.workflow.inventory_review import NotACandidate
 from app.workflow.scope import SchemaNotFound, ScopeLocked
 
 logger = logging.getLogger(__name__)
@@ -151,6 +158,14 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(UnknownArtifact)
     async def unknown_artifact(request: Request, exc: UnknownArtifact):
         return error_response(422, "VALIDATION_ERROR", str(exc), {"artifact": exc.artifact})
+
+    @app.exception_handler(UnsupportedAction)
+    async def unsupported_action(request: Request, exc: UnsupportedAction):
+        return error_response(422, "VALIDATION_ERROR", str(exc), {"artifact": exc.artifact})
+
+    @app.exception_handler(NotACandidate)
+    async def not_a_candidate(request: Request, exc: NotACandidate):
+        return error_response(422, "VALIDATION_ERROR", str(exc), {"table": exc.table})
 
     @app.exception_handler(NotFound)
     async def contract_item_not_found(request: Request, exc: NotFound):
