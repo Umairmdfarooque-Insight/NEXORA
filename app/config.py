@@ -3,16 +3,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
-FABRIC_WORKSPACE_ID = os.getenv("FABRIC_WORKSPACE_ID")
-FABRIC_LAKEHOUSE_ID = os.getenv("FABRIC_LAKEHOUSE_ID")
-FABRIC_WORKSPACE_NAME = os.getenv("FABRIC_WORKSPACE_NAME")
-FABRIC_LAKEHOUSE_NAME = os.getenv("FABRIC_LAKEHOUSE_NAME")
-FABRIC_SQL_SERVER = os.getenv("FABRIC_SQL_SERVER")
-FABRIC_SQL_DATABASE = os.getenv("FABRIC_SQL_DATABASE")
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(PROJECT_ROOT / ".env")
+
+# Load .env once, from the project root, so the result doesn't depend on the
+# working directory. Values already set in the shell take precedence.
+load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 
 def get_required_setting(name: str) -> str:
@@ -27,9 +22,18 @@ def get_required_setting(name: str) -> str:
     return value.strip()
 
 
-APP_NAME = os.getenv("APP_NAME", "Nexora")
-UI_APP_NAME = os.getenv("UI_APP_NAME", "Rayfin")
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+def get_optional_setting(name: str, default: str | None = None) -> str | None:
+    value = os.getenv(name)
+
+    if not value or not value.strip():
+        return default
+
+    return value.strip()
+
+
+APP_NAME = get_optional_setting("APP_NAME", "Nexora")
+UI_APP_NAME = get_optional_setting("UI_APP_NAME", "Rayfin")
+ENVIRONMENT = get_optional_setting("ENVIRONMENT", "development")
 
 AZURE_OPENAI_ENDPOINT = get_required_setting(
     "AZURE_OPENAI_ENDPOINT"
@@ -42,3 +46,10 @@ AZURE_OPENAI_DEPLOYMENT = get_required_setting(
 AZURE_OPENAI_API_KEY = get_required_setting(
     "AZURE_OPENAI_API_KEY"
 )
+
+FABRIC_WORKSPACE_ID = get_optional_setting("FABRIC_WORKSPACE_ID")
+FABRIC_LAKEHOUSE_ID = get_optional_setting("FABRIC_LAKEHOUSE_ID")
+FABRIC_WORKSPACE_NAME = get_optional_setting("FABRIC_WORKSPACE_NAME")
+FABRIC_LAKEHOUSE_NAME = get_optional_setting("FABRIC_LAKEHOUSE_NAME")
+FABRIC_SQL_SERVER = get_optional_setting("FABRIC_SQL_SERVER")
+FABRIC_SQL_DATABASE = get_optional_setting("FABRIC_SQL_DATABASE")
