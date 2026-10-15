@@ -31,6 +31,7 @@ Windows; a virtualenv lives in `.venv` (Python 3.12). A `.venv` copied from anot
 .venv\Scripts\activate
 pip install -r requirements.txt           # lists every third-party package the code imports
 python -m app.test_requirement_analyzer   # run one script
+python -m app.tools.smoke [--only llm,lakehouse,sql] [--json]   # check LLM, Lakehouse and SQL access; exit 0/1/2
 ```
 
 - There is no build, lint, or pytest setup. The `app/test_*.py` files are **manual scripts** with a `main()`. Each exercises one pipeline stage against live Azure/Fabric.
