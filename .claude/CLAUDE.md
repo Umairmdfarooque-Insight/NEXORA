@@ -35,6 +35,7 @@ pip install -r requirements.txt           # lists every third-party package the 
 python -m app.test_requirement_analyzer   # run one script
 python -m app.tools.smoke [--only llm,lakehouse,sql] [--json]   # check LLM, Lakehouse and SQL access; exit 0/1/2
 python -m app.cli runs create --prompt "..."   # also: list, show RUN_ID, transition RUN_ID STATE (exit 0/1/2)
+python -m app.cli contract validate FILE   # VALID/INVALID (exit 0/1); also: contract schema [--output FILE]
 uvicorn app.api.main:app --reload --port 8000   # orchestration API; Swagger at /docs
 cd rayfin-ui; npm install; npm run dev          # Rayfin UI on http://localhost:3000 (also: npm test, npm run typecheck, npm run build)
 ```
@@ -54,6 +55,10 @@ cd rayfin-ui; npm install; npm run dev          # Rayfin UI on http://localhost:
 Fabric access for runs: `connectors/fabric_api.py` (`FabricApiClient`) lists workspaces and Lakehouses (paging, 429 retry, typed errors); `workflow/scope.py` (`bind_scope`) verifies and saves a run's `scope` (`PUT /runs/{id}/scope`, locked once metadata is harvested). Connectors take the scope through `FabricLakehouseConnector.for_scope(scope)` and `FabricSQLConnector.for_scope(scope)`; with no scope they fall back to the `FABRIC_*` values in `.env`.
 
 `rayfin-ui/` is the Rayfin web UI: Next.js (app router), TypeScript and Fluent UI v9. Pages: `/runs` (list), `/runs/new` (prompt, scope and options form), `/runs/[id]` (state, next action, open questions, scope, timeline). All data comes from the API through `src/lib/api.ts` (`NEXT_PUBLIC_API_BASE_URL`, default `http://localhost:8000`, set in the gitignored `rayfin-ui/.env.local`); the UI holds no business logic. The UI signs in with MSAL (`src/lib/auth.ts`, `src/components/AuthProvider.tsx`) before any page renders and sends the token as a bearer header (`src/lib/api.ts` refreshes it silently once on `TOKEN_EXPIRED`). Settings: `NEXT_PUBLIC_ENTRA_TENANT_ID`, `NEXT_PUBLIC_ENTRA_CLIENT_ID`, `NEXT_PUBLIC_API_SCOPE`. The API's CORS allows only `http://localhost:3000`, so the UI must run on that port.
+
+## Business contract
+
+`app/contracts/business_contract.py` defines `BusinessContract` (pydantic, `extra="forbid"`) and its parts (`Kpi`, `OpenQuestion`, `LockedFact`, `Feasibility`). `load`/`save` read and write `BusinessContract.yaml` deterministically (fixed key order, UTF-8, LF; `save` returns the `sha256:` hash). The approval rules (no open blocking question; every KPI has `formula_intent`, `grain` and `currency`; unique KPI names and ids) live in the model, not in prompts. `schemas/business_contract.schema.json` is the committed JSON Schema (regenerate with `contract schema --output`); `samples/contract_valid.yaml` is the reference sample. Nothing writes a contract into a run yet (T-202).
 
 ## Architecture
 

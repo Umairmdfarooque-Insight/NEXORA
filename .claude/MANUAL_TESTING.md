@@ -179,9 +179,33 @@ Needs Node.js 20 or later (checked with 24) and two terminals. Run the API from 
 
 ---
 
-## M2 onward
+## M2 — Requirement control
 
-Sections for T-201 and later are added when each task is implemented.
+### T-201 — BusinessContract schema
+
+1. 💻 **Valid sample.** `python -m app.cli contract validate samples/contract_valid.yaml; echo $LASTEXITCODE`. **Expected:** `VALID` and `0`.
+2. 💻 **Missing field.** `Copy-Item samples\contract_valid.yaml $env:TEMP\c2.yaml`, open the copy, set `status: approved` on the first line that says `status: draft` (the contract's own status, near the top), and delete the KPI's `formula_intent:` line. Run `python -m app.cli contract validate $env:TEMP\c2.yaml; echo $LASTEXITCODE`. **Expected:** `INVALID`, a line starting `kpis.0.formula_intent:` and exit `1`. Put the line back and the file is `VALID` again.
+3. 💻 **Blocking question prevents approval.** In the copy (contract `status: approved`, `formula_intent` restored), replace `open_questions: []` with:
+   ```yaml
+   open_questions:
+   - id: Q1
+     text: How is Revenue defined?
+     blocking: true
+     source: rule
+     status: open
+   ```
+   **Expected:** `INVALID` with a line naming `open_questions.0` and `Q1`. Change `status: open` to `status: answered` and it is `VALID`. With contract `status: draft` the open question is allowed.
+4. 💻 **Round trip.** `python -c "from app.contracts import business_contract as b; print(b.save(b.load('samples/contract_valid.yaml'), r'$env:TEMPt.yaml'))"` then `fc.exe /b samples\contract_valid.yaml $env:TEMPt.yaml`. **Expected:** a `sha256:…` line, then `FC: no differences encountered`.
+5. 💻 **Schema export.** `python -m app.cli contract schema --output $env:TEMP\schema.json`, then `python -c "import json,os; d=json.load(open(os.environ['TEMP']+'/schema.json')); print('kpis' in d['properties'])"`. **Expected:** `True`. (`python -m app.cli contract schema` prints the same JSON; with PowerShell's `>` the file would be UTF-16, which is why `--output` exists.) Compare with the committed file: `python -m app.manual_tests.t201_offline_checks` reports it as current.
+6. 💻 **Edge cases.** Make a copy each time. (a) Rename `kpis:` to `kpi:`. **Expected:** `kpi: extra field not permitted`. (b) Add `- name: net revenue` right under `kpis:`. **Expected:** a `kpis.1.name` line that also names `kpis.0.name`. (c) Set `schema_version: 2`. **Expected:** `unsupported schema_version 2`. (d) Empty the file. **Expected:** `empty document`. (e) Break the YAML, for example a lone `[` line. **Expected:** a message with `line` and `column`. (f) A path that doesn't exist. **Expected:** `File not found: …`, exit `2`.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t201_offline_checks`. **Expected:** `All checks passed.` (38 checks covering all of the above, determinism, UTF-8/LF output, hash and the committed schema file).
+8. 💻 **Clean up.** `Remove-Item $env:TEMP\c2.yaml, $env:TEMPt.yaml, $env:TEMP\schema.json -ErrorAction SilentlyContinue`.
+
+---
+
+## M3 onward
+
+Sections for T-202 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -195,6 +219,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t103_offline_checks.py` | T-103 | Fake-Fabric checks of the Fabric client, scope binding and scope locking |
 | `app/manual_tests/t103_connectors_check.py` | T-103 | Live check that scope-based connectors reach the Lakehouse and its SQL endpoint |
 | `app/manual_tests/t105_offline_checks.py` | T-105 | Throwaway-key JWT checks of token validation, OBO, attribution and the auth gate |
+| `app/manual_tests/t201_offline_checks.py` | T-201 | Checks of BusinessContract validation, round trip, CLI and schema export |
 
 ## Adding a task
 

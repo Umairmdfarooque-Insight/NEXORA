@@ -53,7 +53,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-103 | Workspace and Lakehouse selection | M1 | Done | task/T-103-workspace-and-lakehouse-selection |
 | T-104 | Rayfin UI shell | M1 | Done | task/T-104-rayfin-ui-shell |
 | T-105 | Entra authentication | M1 | Done | task/T-105-entra-authentication |
-| T-201 | BusinessContract schema | [M2 Requirement control](M2-requirement-control.md) | Not started |  |
+| T-201 | BusinessContract schema | [M2 Requirement control](M2-requirement-control.md) | Done | task/T-201-businesscontract-schema |
 | T-202 | Requirement Compiler with ambiguity detection | M2 | Not started |  |
 | T-203 | Clarification loop | M2 | Not started |  |
 | T-204 | Approval service and Gate G1 | M2 | Not started |  |
