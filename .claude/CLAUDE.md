@@ -25,18 +25,17 @@ Rules from the spec that constrain all new code:
 
 ## Commands
 
-Windows; a virtualenv lives in `.venv` (Python 3.12).
+Windows; a virtualenv lives in `.venv` (Python 3.12). A `.venv` copied from another machine fails with "No Python at ..."; recreate it with `py -3.12 -m venv .venv`.
 
 ```
 .venv\Scripts\activate
-pip install -r requirements.txt
-pip install pydantic pyodbc      # imported by the code but missing from requirements.txt
+pip install -r requirements.txt           # lists every third-party package the code imports
 python -m app.test_requirement_analyzer   # run one script
 ```
 
 - There is no build, lint, or pytest setup. The `app/test_*.py` files are **manual scripts** with a `main()`. Each exercises one pipeline stage against live Azure/Fabric.
 - Run them as modules from the project root (`python -m app.test_x`). Imports are absolute (`from app.config import ...`), so running the file directly will fail.
-- Running anything needs a `.env` (copy `.env.example`). `app/config.py` calls `get_required_setting` at import time for `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT` and `AZURE_OPENAI_API_KEY`, so importing `app.config` raises `ValueError` if any is missing. That includes the connector modules. The Fabric settings (`FABRIC_*`) are optional at import time.
+- Running anything needs a `.env` (copy `.env.example`). `app/config.py` loads `PROJECT_ROOT/.env` once (shell variables win over `.env`, so the working directory doesn't matter) and calls `get_required_setting` at import time for `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT` and `AZURE_OPENAI_API_KEY`, so importing `app.config` raises `ValueError` if any is missing. That includes the connector modules. The Fabric settings (`FABRIC_*`) are optional: `get_optional_setting` returns `None` when they are unset or blank.
 - Fabric access uses `InteractiveBrowserCredential`, so every connector run opens a browser login. `fabric_sql_connector` also needs the ODBC Driver 18 for SQL Server installed.
 
 ## Architecture

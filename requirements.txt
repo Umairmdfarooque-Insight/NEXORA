@@ -2,3 +2,8 @@ openai
 python-dotenv
 azure-identity
 requests
+pydantic
+pyodbc
+pyyaml
+fastapi
+uvicorn
