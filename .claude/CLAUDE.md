@@ -35,6 +35,7 @@ pip install -r requirements.txt           # lists every third-party package the 
 python -m app.test_requirement_analyzer   # run one script
 python -m app.tools.smoke [--only llm,lakehouse,sql] [--json]   # check LLM, Lakehouse and SQL access; exit 0/1/2
 python -m app.cli runs create --prompt "..."   # also: list, show RUN_ID, transition RUN_ID STATE (exit 0/1/2)
+uvicorn app.api.main:app --reload --port 8000   # orchestration API; Swagger at /docs
 ```
 
 - Test data for the acceptance scenarios lives in schema `nexora_test` of the sandbox Lakehouse. It is created by the Spark notebook `fixtures/create_test_tables.ipynb` (see `fixtures/README.md`), not by Python in `app/`. `python -m app.test_metadata_inventory [schema]` lists a schema's tables (default `saleslt`).
@@ -46,6 +47,8 @@ python -m app.cli runs create --prompt "..."   # also: list, show RUN_ID, transi
 ## Runs
 
 `app/workflow/` holds the run states (`states.py`) and the `Run` model with the single `apply_transition` function (`run.py`). `app/store/` holds the `RunStore` interface (`base.py`), the default `FileRunStore` (`runs/<run_id>/RunManifest.json`, gitignored) and `SqlRunStore` (table `dbo.nexora_runs` in a writable Fabric SQL Database). `RUN_STORE=file|fabric_sql` picks the store through `get_run_store()`; `fabric_sql` also needs `FABRIC_CONTROL_DB_SERVER` and `FABRIC_CONTROL_DB_NAME`. Only the store writes manifests.
+
+`app/api/` is the FastAPI orchestration API (`main.py` app, CORS for `http://localhost:3000`; `runs.py` routes; `schemas.py`; `errors.py` maps exceptions to the shared error envelope; `deps.py` supplies the store). Handlers hold no business logic and there is no public state-transition endpoint. `app/workflow/next_action.py` maps each state to its `next_action`. No authentication until T-105, so run it locally only.
 
 ## Architecture
 
