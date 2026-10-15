@@ -164,6 +164,9 @@ Appended to `runs/<run_id>/approvals.jsonl`, one JSON object per line. The file 
 ```
 
 - `action` is one of `ACCEPT` | `EDIT` | `REJECT` | `EXPLAIN` | `REGENERATE` (FR-018).
+- `artifact_version` and `artifact_hash` are those of the artifact version the action acted on. `ACCEPT` and `EDIT` record the version they produced (for `ACCEPT`, the locked, `approved` version).
+- `role` is the role the user held when acting (`business_owner` first), or `null` if the user holds none. `gate_result_ref` is set on `ACCEPT`.
+- A refused action (`FORBIDDEN`, `GATE_FAILED`, `STALE_VERSION`, …) writes no record.
 - `target` optionally narrows the action to one object, for example `{ "page": "Overview", "visual": "v3" }`.
 
 ## Gate result
@@ -183,7 +186,7 @@ Saved as `runs/<run_id>/gates/<gate>-<timestamp>.json`.
 }
 ```
 
-Check `status` is `pass` | `fail` | `warning`. A gate passes only when no check has the status `fail`.
+A `409 GATE_FAILED` carries `details.failed_checks` (the ids) and `details.gate_result`. Check `status` is `pass` | `fail` | `warning`. A gate passes only when no check has the status `fail`.
 
 ## Validation report
 

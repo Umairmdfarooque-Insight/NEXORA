@@ -161,24 +161,35 @@ def edit_kpi(
     if artifact is None or artifact.hash != expected_hash:
         raise StaleVersion(expected_hash, artifact.hash if artifact else "")
 
-    key = kpi_name.strip().lower()
-    index = next((i for i, k in enumerate(contract.kpis) if k.name.strip().lower() == key), None)
-    if index is None:
-        raise NotFound(f"No KPI {kpi_name!r} in the contract")
-
-    data = contract.model_dump(mode="json")
-    data["kpis"][index].update({k: v for k, v in changes.items() if k in EDITABLE_KPI_FIELDS})
-    data["version"] = contract.version + 1
-
-    # A KPI defined by a locked fact keeps that fact in step with the owner's edit, so the
-    # next recompile doesn't reset it.
-    if "formula_intent" in changes and (changes["formula_intent"] or "").strip():
-        config = load_critical_terms()
-        for fact in data["locked_facts"]:
-            term = term_for_fact(bc.LockedFact.model_validate(fact), config)
-            if term is not None and matching_kpi_index(contract, term, config) == index:
-                fact["text"] = changes["formula_intent"].strip()
-                fact["locked_at"] = utc_now()
-
-    updated = bc.BusinessContract.model_validate(data)
+    updated = apply_kpi_edits(contract, {kpi_name: changes})
     return save_contract_version(store, runs_root, run, updated)
+
+
+def apply_kpi_edits(
+    contract: bc.BusinessContract, edits: dict[str, dict]
+) -> bc.BusinessContract:
+    """The contract with partial KPI edits applied (`edits` maps a KPI name, matched
+    case-insensitively, to the fields to set), as the next version. Raises NotFound."""
+    data = contract.model_dump(mode="json")
+    config = None
+    for kpi_name, changes in edits.items():
+        key = kpi_name.strip().lower()
+        index = next(
+            (i for i, k in enumerate(contract.kpis) if k.name.strip().lower() == key), None
+        )
+        if index is None:
+            raise NotFound(f"No KPI {kpi_name!r} in the contract")
+        data["kpis"][index].update(
+            {k: v for k, v in changes.items() if k in EDITABLE_KPI_FIELDS}
+        )
+        # A KPI defined by a locked fact keeps that fact in step with the owner's edit, so
+        # the next recompile doesn't reset it.
+        if "formula_intent" in changes and (changes["formula_intent"] or "").strip():
+            config = config or load_critical_terms()
+            for fact in data["locked_facts"]:
+                term = term_for_fact(bc.LockedFact.model_validate(fact), config)
+                if term is not None and matching_kpi_index(contract, term, config) == index:
+                    fact["text"] = changes["formula_intent"].strip()
+                    fact["locked_at"] = utc_now()
+    data["version"] = contract.version + 1
+    return bc.BusinessContract.model_validate(data)

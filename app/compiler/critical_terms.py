@@ -249,7 +249,13 @@ def apply_locked_facts(
     if previous is not None:
         have = {q.id for q in questions}
         for question in previous.open_questions:
-            if question.status is not QuestionStatus.OPEN and question.id not in have:
+            # Answered and dismissed questions stay closed; an open question a reviewer
+            # raised (T-204) stays open until someone answers it.
+            keep = (
+                question.status is not QuestionStatus.OPEN
+                or question.source is QuestionSource.REVIEWER
+            )
+            if keep and question.id not in have:
                 questions.append(question)
                 have.add(question.id)
         have_facts = {f.id for f in facts}

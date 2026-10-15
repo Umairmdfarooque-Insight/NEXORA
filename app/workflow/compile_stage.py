@@ -79,7 +79,11 @@ def _write_compile_log(
 
 
 def save_contract_version(
-    store: RunStore, runs_root: Path, run: Run, contract: bc.BusinessContract
+    store: RunStore,
+    runs_root: Path,
+    run: Run,
+    contract: bc.BusinessContract,
+    status: str = "draft",
 ) -> bc.BusinessContract:
     """Write `contract` as the next version file and as the current file, and register the
     artifact. Returns the contract with its final version number. Doesn't touch the state."""
@@ -96,7 +100,7 @@ def save_contract_version(
         path=CURRENT,
         version=version,
         hash=digest,
-        status="draft",
+        status=status,
         based_on={},
         updated_at=utc_now(),
     )
@@ -115,6 +119,7 @@ def compile_run(
     llm: LlmCall | None = None,
     previous=_LOAD,
     action: str = "Compiling the requirement",
+    guidance: str | None = None,
 ) -> tuple[Run, bc.BusinessContract]:
     """Compile the run's prompt into the next contract version.
 
@@ -131,7 +136,9 @@ def compile_run(
         previous = load_current_contract(runs_root, run_id)
     warnings: list[str] = []
     try:
-        contract = compile_requirement(run, previous, llm=llm, warnings=warnings)
+        contract = compile_requirement(
+            run, previous, llm=llm, warnings=warnings, guidance=guidance
+        )
     except LlmInvalidOutput as exc:
         _write_compile_log(runs_root, run_id, attempts=exc.attempts)
         raise

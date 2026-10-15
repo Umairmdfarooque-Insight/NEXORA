@@ -15,6 +15,7 @@ from app.api.errors import register_error_handlers
 from app.api.schemas import Health
 from app.compiler.critical_terms import load_critical_terms
 from app.config import APP_NAME, PROJECT_ROOT
+from app.workflow.roles import load_roles
 
 RAYFIN_ORIGIN = "http://localhost:3000"
 
@@ -49,6 +50,7 @@ if not _app_logger.handlers:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     load_critical_terms()  # a missing or invalid config/critical_terms.yaml stops the API here
+    load_roles()  # so does config/roles.yaml
     yield
 
 

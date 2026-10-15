@@ -36,7 +36,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | Model authoring route | Canonical TMDL files generated deterministically; MCP optional later | T-502 |
 | Report authoring route | Deterministic PBIR generator | T-602 |
 | Sandbox topology | One dedicated sandbox workspace per environment | T-501 |
-| Approval roles | Roles from [product-definition.md](../spec/product-definition.md#users-and-responsibilities); one person may hold several roles during development | T-204 |
+| Approval roles | **Decided: spec roles in a committed `config/roles.yaml`** (real UPNs in the public repo, one person may hold several roles during development) | T-204 |
 | Initial domain | **Decided: Sales** (the existing `saleslt` data) | T-202 |
 | Retry limits | 3 attempts per artifact section | T-505 |
 
@@ -56,7 +56,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-201 | BusinessContract schema | [M2 Requirement control](M2-requirement-control.md) | Done | task/T-201-businesscontract-schema |
 | T-202 | Requirement Compiler with ambiguity detection | M2 | Done | task/T-202-requirement-compiler-ambiguity-detection |
 | T-203 | Clarification loop | M2 | Done | task/T-203-clarification-loop |
-| T-204 | Approval service and Gate G1 | M2 | Not started |  |
+| T-204 | Approval service and Gate G1 | M2 | Done | task/T-204-approval-service-gate-g1 |
 | T-205 | Clarification and contract review UI | M2 | Not started |  |
 | T-301 | Metadata Harvester per run | [M3 Data understanding](M3-data-understanding.md) | Not started |  |
 | T-302 | Generic data profiler | M3 | Not started |  |
