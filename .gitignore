@@ -2,4 +2,7 @@
 .venv/
 __pycache__/
 *.py[cod]
-runs/
+/runs/
+node_modules/
+.next/
+.env.local

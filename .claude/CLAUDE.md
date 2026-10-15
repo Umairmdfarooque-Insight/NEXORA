@@ -36,6 +36,7 @@ python -m app.test_requirement_analyzer   # run one script
 python -m app.tools.smoke [--only llm,lakehouse,sql] [--json]   # check LLM, Lakehouse and SQL access; exit 0/1/2
 python -m app.cli runs create --prompt "..."   # also: list, show RUN_ID, transition RUN_ID STATE (exit 0/1/2)
 uvicorn app.api.main:app --reload --port 8000   # orchestration API; Swagger at /docs
+cd rayfin-ui; npm install; npm run dev          # Rayfin UI on http://localhost:3000 (also: npm test, npm run typecheck, npm run build)
 ```
 
 - Test data for the acceptance scenarios lives in schema `nexora_test` of the sandbox Lakehouse. It is created by the Spark notebook `fixtures/create_test_tables.ipynb` (see `fixtures/README.md`), not by Python in `app/`. `python -m app.test_metadata_inventory [schema]` lists a schema's tables (default `saleslt`).
@@ -51,6 +52,8 @@ uvicorn app.api.main:app --reload --port 8000   # orchestration API; Swagger at 
 `app/api/` is the FastAPI orchestration API (`main.py` app, CORS for `http://localhost:3000`; `runs.py` routes; `schemas.py`; `errors.py` maps exceptions to the shared error envelope; `deps.py` supplies the store). Handlers hold no business logic and there is no public state-transition endpoint. `app/workflow/next_action.py` maps each state to its `next_action`. No authentication until T-105, so run it locally only.
 
 Fabric access for runs: `connectors/fabric_api.py` (`FabricApiClient`) lists workspaces and Lakehouses (paging, 429 retry, typed errors); `workflow/scope.py` (`bind_scope`) verifies and saves a run's `scope` (`PUT /runs/{id}/scope`, locked once metadata is harvested). Connectors take the scope through `FabricLakehouseConnector.for_scope(scope)` and `FabricSQLConnector.for_scope(scope)`; with no scope they fall back to the `FABRIC_*` values in `.env`.
+
+`rayfin-ui/` is the Rayfin web UI: Next.js (app router), TypeScript and Fluent UI v9. Pages: `/runs` (list), `/runs/new` (prompt, scope and options form), `/runs/[id]` (state, next action, open questions, scope, timeline). All data comes from the API through `src/lib/api.ts` (`NEXT_PUBLIC_API_BASE_URL`, default `http://localhost:8000`, set in the gitignored `rayfin-ui/.env.local`); the UI holds no business logic. The API's CORS allows only `http://localhost:3000`, so the UI must run on that port.
 
 ## Architecture
 

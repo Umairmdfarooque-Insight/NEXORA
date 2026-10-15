@@ -113,9 +113,33 @@ Start the API in one terminal (leave it running): `uvicorn app.api.main:app --re
 
 ---
 
+### T-104 — Rayfin UI shell
+
+Needs Node.js 20 or later (checked with 24) and two terminals. Run the API from the project root, and the UI from `rayfin-ui\`. Steps 1 and 10 need the live Fabric sign-in; the rest work with no Fabric access (the workspace list just stays empty).
+
+**One-time setup:** `cd rayfin-ui; npm install` (the UI reads `NEXT_PUBLIC_API_BASE_URL`, default `http://localhost:8000`; to change it, copy `.env.local.example` to `.env.local`).
+
+**Start:** terminal 1: `.venv\Scripts\activate; uvicorn app.api.main:app --port 8000`. Terminal 2: `cd rayfin-ui; npm run dev`, then open <http://localhost:3000>. If the page shows HTTP 426 or a blank error, another program is holding port 3000 (on one machine `AMAgent.exe` did); stop it, because the API only allows the origin `http://localhost:3000`.
+
+1. 🌐 **Create through the UI.** Open <http://localhost:3000/runs/new>, type a prompt (for example `Total sales by month`), choose your sandbox workspace and Lakehouse, and click **Create run**. **Expected:** you land on `/runs/<id>` showing state `CREATED`, the chosen workspace, Lakehouse and SQL endpoint under "Data scope", and "Compile requirement" as the next action.
+2. 💻 **Create without a data scope.** On `/runs/new`, enter a prompt and leave the workspace empty, then submit. **Expected:** you land on the run page with "No data scope selected yet."
+3. 💻 **Listed.** Open <http://localhost:3000/runs>. **Expected:** the new run is at the top, with its state badge, created time and prompt text. The run id links to the detail page.
+4. 💻 **One-screen status.** Open a run's detail page with the browser window at 1366×768 (in Edge or Chrome: F12, device toolbar, set 1366×768; or just use a 1366×768 screen). **Expected:** the state, next action, open questions, prompt, scope and timeline are visible without scrolling.
+5. 💻 **API down.** Stop the API (Ctrl+C in terminal 1). On `/runs/new` type a prompt and click **Create run**. **Expected:** a red banner "Couldn't create the run." saying it can't reach the API, with a **Retry** button; the prompt text is still in the editor. Start the API again and click **Retry**: you land on the new run.
+6. 💻 **Validation shown.** On `/runs/new`, leave the prompt empty and click **Create run**. **Expected:** an inline message under the prompt field (`Invalid`-style text from the API, such as "String should have at least 1 character"). No run is created.
+7. 💻 **Empty state.** Stop the API, delete the `runs\` folder (or set `RUN_STORE` to an empty store), start the API, and open `/runs`. **Expected:** "No runs yet." and a "Create your first run" link.
+8. 💻 **Error banner with retry on the list.** Stop the API and reload `/runs`. **Expected:** a banner "Couldn't load runs." with **Retry**. Start the API and click **Retry**: the list appears.
+9. 💻 **Run not found.** Open <http://localhost:3000/runs/does-not-exist>. **Expected:** "Run not found: does-not-exist" and a link back to the runs list.
+10. 🌐 **No Lakehouses.** Pick a workspace that has no Lakehouse (if you have one). **Expected:** the Lakehouse field shows "No Lakehouses in this workspace" and **Create run** is disabled.
+11. 💻 **Keyboard and labels.** On `/runs/new`, press Tab through the page. **Expected:** focus moves in order through the nav links, prompt, subject area, outputs, constraints, workspace, Lakehouse and the button, each with a visible focus ring and a label.
+12. 💻 **Unit tests and build.** `cd rayfin-ui; npm test; npm run typecheck; npm run build`. **Expected:** 5 passing tests, no type errors, and a successful build listing `/runs`, `/runs/new` and `/runs/[id]`.
+13. 💻 **Clean up.** Stop both servers (Ctrl+C) and delete the `runs\` folder.
+
+---
+
 ## M1 onward
 
-Sections for T-104 and later are added when each task is implemented.
+Sections for T-105 and later are added when each task is implemented.
 
 ## Helper scripts
 

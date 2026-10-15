@@ -51,7 +51,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-101 | Run model, state machine and run store | [M1 Foundation](M1-foundation.md) | Done | task/T-101-run-model-state-machine-and-run-store |
 | T-102 | Orchestration API skeleton | M1 | Done | task/T-102-orchestration-api-skeleton |
 | T-103 | Workspace and Lakehouse selection | M1 | Done | task/T-103-workspace-and-lakehouse-selection |
-| T-104 | Rayfin UI shell | M1 | Not started |  |
+| T-104 | Rayfin UI shell | M1 | Done | task/T-104-rayfin-ui-shell |
 | T-105 | Entra authentication | M1 | Not started |  |
 | T-201 | BusinessContract schema | [M2 Requirement control](M2-requirement-control.md) | Not started |  |
 | T-202 | Requirement Compiler with ambiguity detection | M2 | Not started |  |
