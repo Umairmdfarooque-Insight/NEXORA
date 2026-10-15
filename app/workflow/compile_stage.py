@@ -62,40 +62,28 @@ def _next_version(contracts_dir: Path, wanted: int) -> int:
     return max([wanted, *(n + 1 for n in existing)])
 
 
-def _write_failure_log(runs_root: Path, run_id: str, attempts: list[dict]) -> None:
+def _write_compile_log(
+    runs_root: Path, run_id: str, attempts: list[dict] | None = None, warnings: list[str] | None = None
+) -> None:
     logs = Path(runs_root) / run_id / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    body = {"run_id": run_id, "stage": "compile", "at": utc_now(), "attempts": attempts}
+    body: dict = {"run_id": run_id, "stage": "compile", "at": utc_now()}
+    if attempts is not None:
+        body["attempts"] = attempts
+    if warnings:
+        body["warnings"] = warnings
     (logs / f"compile-{stamp}.json").write_text(
         json.dumps(body, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
 
-def compile_run(
-    store: RunStore,
-    runs_root: Path,
-    run_id: str,
-    actor: str = "system",
-    llm: LlmCall | None = None,
-) -> tuple[Run, bc.BusinessContract]:
-    """Compile the run's prompt into the next contract version.
-
-    State afterwards: NEEDS_CLARIFICATION while a blocking question is open, otherwise
-    CREATED. A state that doesn't change adds no history entry.
-    """
-    run = store.get(run_id)
-    if run.state not in COMPILE_STATES:
-        raise WrongState("Compiling the requirement", run.state, COMPILE_STATES)
-
-    previous = load_current_contract(runs_root, run_id)
-    try:
-        contract = compile_requirement(run, previous, llm=llm)
-    except LlmInvalidOutput as exc:
-        _write_failure_log(runs_root, run_id, exc.attempts)
-        raise
-
-    run_dir = Path(runs_root) / run_id
+def save_contract_version(
+    store: RunStore, runs_root: Path, run: Run, contract: bc.BusinessContract
+) -> bc.BusinessContract:
+    """Write `contract` as the next version file and as the current file, and register the
+    artifact. Returns the contract with its final version number. Doesn't touch the state."""
+    run_dir = Path(runs_root) / run.run_id
     contracts_dir = run_dir / "contracts"
     version = _next_version(contracts_dir, contract.version)
     if version != contract.version:
@@ -113,6 +101,44 @@ def compile_run(
         updated_at=utc_now(),
     )
     store.save(run)
+    return contract
+
+
+_LOAD = object()
+
+
+def compile_run(
+    store: RunStore,
+    runs_root: Path,
+    run_id: str,
+    actor: str = "system",
+    llm: LlmCall | None = None,
+    previous=_LOAD,
+    action: str = "Compiling the requirement",
+) -> tuple[Run, bc.BusinessContract]:
+    """Compile the run's prompt into the next contract version.
+
+    `previous` defaults to the run's current contract file; the clarification loop passes
+    the current contract with the user's answer already applied. State afterwards:
+    NEEDS_CLARIFICATION while a blocking question is open, otherwise CREATED. A state that
+    doesn't change adds no history entry.
+    """
+    run = store.get(run_id)
+    if run.state not in COMPILE_STATES:
+        raise WrongState(action, run.state, COMPILE_STATES)
+
+    if previous is _LOAD:
+        previous = load_current_contract(runs_root, run_id)
+    warnings: list[str] = []
+    try:
+        contract = compile_requirement(run, previous, llm=llm, warnings=warnings)
+    except LlmInvalidOutput as exc:
+        _write_compile_log(runs_root, run_id, attempts=exc.attempts)
+        raise
+    if warnings:
+        _write_compile_log(runs_root, run_id, warnings=warnings)
+
+    contract = save_contract_version(store, runs_root, run, contract)
 
     blocking = len(bc.open_blocking_questions(contract))
     target = RunState.NEEDS_CLARIFICATION if blocking else RunState.CREATED

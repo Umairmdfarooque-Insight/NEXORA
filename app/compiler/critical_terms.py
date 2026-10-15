@@ -13,6 +13,7 @@ import yaml
 from app.config import PROJECT_ROOT
 from app.contracts.business_contract import (
     BusinessContract,
+    LockedFact,
     OpenQuestion,
     QuestionSource,
     QuestionStatus,
@@ -188,20 +189,67 @@ def _normal(text: str) -> str:
     return re.sub(r"\W+", " ", text).strip().lower()
 
 
-def apply_locked_facts(
-    contract: BusinessContract, previous: BusinessContract | None
+def term_for_fact(fact: LockedFact, config: CriticalTerms) -> str | None:
+    """The critical term a locked fact defines: the fact came from that term's rule question."""
+    for term in config.terms:
+        if fact.source_question_id == term_question_id(term):
+            return term
+    return None
+
+
+def matching_kpi_index(contract: BusinessContract, term: str, config: CriticalTerms) -> int | None:
+    """Index of the first KPI whose name mentions the term or one of its aliases."""
+    names = [term, *config.terms[term]]
+    for index, kpi in enumerate(contract.kpis):
+        if any(_mentions(kpi.name, n) for n in names):
+            return index
+    return None
+
+
+def _enforce_term_facts(
+    contract: BusinessContract, config: CriticalTerms, warnings: list[str]
 ) -> BusinessContract:
-    """Carry earlier answers and locked facts into the new contract unchanged.
+    """A locked fact that defines a critical term is the KPI's `formula_intent`, whatever
+    the LLM wrote. The first KPI that mentions the term gets it."""
+    kpis = [k.model_copy() for k in contract.kpis]
+    changed = False
+    for fact in contract.locked_facts:
+        term = term_for_fact(fact, config)
+        index = matching_kpi_index(contract, term, config) if term else None
+        if index is None or kpis[index].formula_intent == fact.text:
+            continue
+        if (kpis[index].formula_intent or "").strip():
+            warnings.append(
+                f"LLM output contradicts locked fact {fact.id}; "
+                f"formula_intent of KPI {kpis[index].name!r} was reset to the locked fact"
+            )
+        kpis[index] = kpis[index].model_copy(update={"formula_intent": fact.text})
+        changed = True
+    if not changed:
+        return contract
+    data = contract.model_dump(mode="json")
+    data["kpis"] = [k.model_dump(mode="json") for k in kpis]
+    return BusinessContract.model_validate(data)
+
+
+def apply_locked_facts(
+    contract: BusinessContract,
+    previous: BusinessContract | None,
+    config: CriticalTerms | None = None,
+    warnings: list[str] | None = None,
+) -> BusinessContract:
+    """Carry earlier answers, dismissals and locked facts into the new contract unchanged.
 
     LLM questions get their final ids (Q1, Q2, …) here. One that repeats the text of
-    another question is dropped.
+    another question is dropped. With `config`, a fact that defines a critical term is
+    re-applied to its KPI; each override is appended to `warnings`.
     """
     questions = list(contract.open_questions)
     facts = list(contract.locked_facts)
     if previous is not None:
         have = {q.id for q in questions}
         for question in previous.open_questions:
-            if question.status is QuestionStatus.ANSWERED and question.id not in have:
+            if question.status is not QuestionStatus.OPEN and question.id not in have:
                 questions.append(question)
                 have.add(question.id)
         have_facts = {f.id for f in facts}
@@ -226,7 +274,10 @@ def apply_locked_facts(
             counter += 1
         taken.add(f"Q{counter}")
         final.append(question.model_copy(update={"id": f"Q{counter}"}))
-    return _rebuild(contract, open_questions=final, locked_facts=facts)
+    result = _rebuild(contract, open_questions=final, locked_facts=facts)
+    if config is not None:
+        result = _enforce_term_facts(result, config, warnings if warnings is not None else [])
+    return result
 
 
 def _rebuild(contract: BusinessContract, **changes) -> BusinessContract:

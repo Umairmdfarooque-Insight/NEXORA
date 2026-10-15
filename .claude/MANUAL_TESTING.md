@@ -224,9 +224,28 @@ To create a run without the UI, use `POST /runs` in Swagger with `{"prompt": "�
 
 ---
 
+### T-203 — Clarification loop
+
+**Before you start:** same setup as T-202 (token in Swagger, API running with `uvicorn app.api.main:app --port 8000`). Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it (`POST /runs/{run_id}/compile`). The answers recompile through the real model, so each takes a few seconds.
+
+1. 🌐 **Answer closes the question.** `POST /runs/{run_id}/questions/RULE-REVENUE/answer` with `{"answer": "Net Revenue = SUM(LineTotal) excluding cancelled orders"}`. **Expected:** HTTP 200 with `run` and `contract`. In the contract, `RULE-REVENUE` has `status: answered` and the `answer`, `locked_facts` has `{"id": "LF-RULE-REVENUE", "source_question_id": "RULE-REVENUE", …}`, and the Revenue KPI's `formula_intent` is the answer text. (The question id is `RULE-REVENUE`, since the rule question is the one that asks how Revenue is defined.)
+2. 🌐 **State advances.** `GET /runs/{run_id}`. **Expected:** `state` is `CREATED`, `next_action` is `Compile requirement`, and `open_questions` lists only non-blocking questions, if any. `python -m app.cli runs show <run_id>` shows a `NEEDS_CLARIFICATION → CREATED` entry by your UPN.
+3. 🌐 **Locked fact survives.** `POST /runs/{run_id}/compile`. **Expected:** `locked_facts` is unchanged, `RULE-REVENUE` is still answered (not asked again) and the KPI keeps the definition.
+4. 🌐 **Dismiss rules.** Create and compile a second run with the same prompt, then `POST /runs/{run_id}/questions/RULE-REVENUE/dismiss` with `{"reason": "skip"}`. **Expected:** `409`, code `QUESTION_CONFLICT`, "blocking questions must be answered". On a run where the model added a non-blocking question (`Q1`), dismiss it with `{"reason": "Out of scope"}`. **Expected:** `200`, the question has `status: dismissed` and the reason, and it no longer appears in `open_questions`. If the model raised no non-blocking question, step 9 covers this with a fake model.
+5. 🌐 **Concurrent edit.** Copy `hash` of `BusinessContract` from `GET /runs/{run_id}/artifacts`. `PUT /runs/{run_id}/contract/kpis/Net%20Revenue` (use the KPI's name in the contract; case does not matter) with `{"currency": "EUR", "expected_hash": "sha256:old"}`. **Expected:** `409`, code `STALE_VERSION`. Repeat with the real hash. **Expected:** `200`, only `currency` changed, and a new version file in `runs\<run_id>\contracts\`. Repeat with the first hash again. **Expected:** `409 STALE_VERSION`.
+6. 🌐 **Edge cases.** An unknown `qid` or KPI name gives `404 NOT_FOUND`; `{"answer": ""}` gives `422`; re-answering `RULE-REVENUE` gives `200` and replaces the locked fact (the old answer remains in the earlier `contracts\BusinessContract.v<n>.yaml`).
+7. 💻 **Edit after approval.** In `runs\<run_id>\BusinessContract.yaml` set `status: approved` (only possible with no blocking question open), then repeat the step 5 request with the current hash. **Expected:** `409 CONTRACT_LOCKED`. Restore the file or discard the run.
+8. 💻 **Valid file.** `python -m app.cli contract validate runs\<run_id>\BusinessContract.yaml`. **Expected:** `VALID`.
+9. 💻 **Offline checks.** `python -m app.manual_tests.t203_offline_checks`. **Expected:** `All checks passed.` (fake LLM: answer, locked fact, state change, locked fact surviving a recompile and a contradicting model, dismiss rules, re-answer, stale and locked edits, 404/409/422 cases).
+10. 💻 **Clean up.** Stop the API and delete the test runs' folders under `runs\` if they were only test data.
+
+**Not run by Claude:** the live steps (1–6), which need your Entra token and the real model.
+
+---
+
 ## Next tasks
 
-Sections for T-203 and later are added when each task is implemented.
+Sections for T-204 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -242,6 +261,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t105_offline_checks.py` | T-105 | Throwaway-key JWT checks of token validation, OBO, attribution and the auth gate |
 | `app/manual_tests/t201_offline_checks.py` | T-201 | Checks of BusinessContract validation, round trip, CLI and schema export |
 | `app/manual_tests/t202_offline_checks.py` | T-202 | Fake-LLM checks of the compile graph, ambiguity rules, versioning and the /compile endpoint |
+| `app/manual_tests/t203_offline_checks.py` | T-203 | Fake-LLM checks of answering, dismissing, locked facts and KPI edits |
 
 ## Adding a task
 

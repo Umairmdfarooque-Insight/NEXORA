@@ -121,7 +121,7 @@ Every API error uses this body:
 | 401 | `UNAUTHENTICATED`, `TOKEN_EXPIRED` | Missing or invalid token |
 | 403 | `FORBIDDEN`, `CONSENT_REQUIRED`, `TARGET_NOT_ALLOWED` | Authenticated but not allowed |
 | 404 | `RUN_NOT_FOUND`, `NOT_FOUND`, `SCHEMA_NOT_FOUND` | Unknown resource |
-| 409 | `ILLEGAL_TRANSITION`, `WRONG_STATE`, `GATE_FAILED`, `CONTRACT_LOCKED`, `STALE_VERSION`, `SCOPE_LOCKED`, `ALREADY_APPROVED`, `HASH_MISMATCH` | Conflicts with the current state |
+| 409 | `ILLEGAL_TRANSITION`, `WRONG_STATE`, `GATE_FAILED`, `CONTRACT_LOCKED`, `STALE_VERSION`, `SCOPE_LOCKED`, `QUESTION_CONFLICT`, `ALREADY_APPROVED`, `HASH_MISMATCH` | Conflicts with the current state |
 | 422 | `VALIDATION_ERROR`, `PROMPT_REJECTED`, `PAYLOAD_REJECTED` | Invalid input, or an LLM payload blocked by the guard (T-705) |
 | 429 | `RATE_LIMITED` | Upstream throttling the caller should retry |
 | 502 | `UPSTREAM_ERROR`, `LLM_INVALID_OUTPUT` | Fabric, Power BI or the LLM returned an error or unusable output |

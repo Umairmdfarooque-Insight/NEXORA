@@ -329,6 +329,18 @@
           ],
           "default": null,
           "title": "Answer"
+        },
+        "dismiss_reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dismiss Reason"
         }
       },
       "required": [
@@ -350,7 +362,8 @@
     "QuestionStatus": {
       "enum": [
         "open",
-        "answered"
+        "answered",
+        "dismissed"
       ],
       "title": "QuestionStatus",
       "type": "string"

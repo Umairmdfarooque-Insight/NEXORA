@@ -12,9 +12,14 @@ from app.api.deps import (
     get_store,
 )
 from app.api.schemas import (
+    AnswerRequest,
     ArtifactItem,
     CompileResponse,
     CreateRunRequest,
+    DismissRequest,
+    KpiEditRequest,
+    KpiEditResponse,
+    QuestionResponse,
     RunDetail,
     RunList,
     RunSummary,
@@ -23,6 +28,7 @@ from app.api.schemas import (
 from app.api.security import Principal, current_user
 from app.connectors.fabric_api import FabricApiClient
 from app.store.base import RunStore
+from app.workflow.clarification import answer_question, dismiss_question, edit_kpi
 from app.workflow.compile_stage import compile_run, open_questions
 from app.workflow.scope import bind_scope
 from app.workflow.states import RunState
@@ -88,6 +94,54 @@ def compile_requirement(
         contract=contract,
         blocking_questions=sum(1 for q in questions if q["blocking"]),
     )
+
+
+def _question_response(run, contract, runs_root: Path) -> QuestionResponse:
+    return QuestionResponse(
+        run=RunDetail.from_run(run, open_questions=open_questions(runs_root, run.run_id)),
+        contract=contract,
+    )
+
+
+@router.post("/{run_id}/questions/{qid}/answer", response_model=QuestionResponse)
+def answer(
+    run_id: str,
+    qid: str,
+    body: AnswerRequest,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    llm=Depends(get_llm),
+    user: Principal = Depends(current_user),
+):
+    run, contract = answer_question(
+        store, runs_root, run_id, qid, body.answer, actor=user.upn, llm=llm
+    )
+    return _question_response(run, contract, runs_root)
+
+
+@router.post("/{run_id}/questions/{qid}/dismiss", response_model=QuestionResponse)
+def dismiss(
+    run_id: str,
+    qid: str,
+    body: DismissRequest,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    run, contract = dismiss_question(store, runs_root, run_id, qid, body.reason)
+    return _question_response(run, contract, runs_root)
+
+
+@router.put("/{run_id}/contract/kpis/{kpi_name}", response_model=KpiEditResponse)
+def update_kpi(
+    run_id: str,
+    kpi_name: str,
+    body: KpiEditRequest,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    changes = body.model_dump(exclude={"expected_hash"}, exclude_unset=True, mode="json")
+    contract = edit_kpi(store, runs_root, run_id, kpi_name, changes, body.expected_hash)
+    return KpiEditResponse(contract=contract)
 
 
 @router.put("/{run_id}/scope", response_model=RunDetail)

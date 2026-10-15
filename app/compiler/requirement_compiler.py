@@ -21,7 +21,7 @@ SCHEMA_NAME = "business_contract_draft"
 # The LLM fills only these. Everything else (ids, versions, status, locked facts,
 # feasibility, question sources and answers) is set by code.
 _ROOT_EXCLUDED = {"schema_version", "run_id", "version", "status", "locked_facts", "feasibility"}
-_DEF_EXCLUDED = {"Kpi": {"status"}, "OpenQuestion": {"id", "source", "status", "answer"}}
+_DEF_EXCLUDED = {"Kpi": {"status"}, "OpenQuestion": {"id", "source", "status", "answer", "dismiss_reason"}}
 # Keywords OpenAI strict structured output doesn't accept.
 _UNSUPPORTED = {"default", "title", "minLength", "maxLength", "minimum", "maximum", "format"}
 
@@ -36,7 +36,7 @@ Rules:
 5. Business-critical terms such as Revenue, Margin or Retention are checked by separate rules. Don't ask what they mean; the rules do.
 6. Add other open questions only for material gaps. Set `blocking` true only when work can't proceed at all without the answer, for example when the requirement names no metric. Questions about details of a definition the requirement already gives are never blocking.
 7. Do not name database tables or columns.
-8. If a previous contract is given, keep its content and change only what the requirement or constraints now say differently.
+8. If a previous contract is given, keep its content and change only what the requirement or constraints now say differently. Its `locked_facts` and answered questions were confirmed by the business owner: never contradict them.
 Return JSON only."""
 
 
@@ -185,8 +185,11 @@ def compile_requirement(
     previous: bc.BusinessContract | None,
     llm: LlmCall | None = None,
     config=None,
+    warnings: list[str] | None = None,
 ) -> bc.BusinessContract:
     """Compile `run.prompt` into a draft contract (version = previous version + 1).
+
+    Warnings (for example a locked fact that had to be re-applied) are appended to `warnings`.
 
     Raises LlmInvalidOutput if the LLM's output is invalid on both attempts, and
     LlmTimeout, PromptRejected or LlmUpstreamError from the LLM call.
@@ -198,7 +201,14 @@ def compile_requirement(
     graph = build_compile_graph(llm=llm or default_llm(), config=config or load_critical_terms())
     result = run_graph(
         graph,
-        {"run": run, "previous": previous, "attempt": 0, "errors": [], "attempts_log": []},
+        {
+            "run": run,
+            "previous": previous,
+            "attempt": 0,
+            "errors": [],
+            "attempts_log": [],
+            "warnings": [],
+        },
         run_id=run.run_id,
         stage="compile",
     )
@@ -208,4 +218,6 @@ def compile_requirement(
             "The model's output was not a valid contract after 2 attempts",
             result.get("attempts_log", []),
         )
+    if warnings is not None:
+        warnings.extend(result.get("warnings", []))
     return contract
