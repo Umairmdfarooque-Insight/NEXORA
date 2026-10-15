@@ -15,7 +15,7 @@ Rayfin is the web UI and workflow control surface. It talks to an **orchestratio
 |---|---|---|
 | Experience | Rayfin web UI; React / Next.js; Fluent UI | Prompt intake, clarification, artifact preview, validation views and approvals |
 | Identity and security | Microsoft Entra ID, managed identity, Key Vault, RBAC | Authentication, authorization, service identity and secret protection |
-| API and orchestration | Python FastAPI or .NET API; LangGraph or explicit workflow state machine | Run state, checkpoints, routing, retries, approvals and impact analysis |
+| API and orchestration | Python FastAPI or .NET API; hybrid orchestration: explicit run state machine plus LangGraph stage graphs ([decision](roadmap-risks-decisions.md#open-decisions)) | Run state, checkpoints, routing, retries, approvals and impact analysis. The state machine owns run state and approvals; stage graphs own the LLM loops inside a stage |
 | AI reasoning | Approved enterprise model endpoint with schema-constrained outputs | Requirement interpretation, ambiguity detection, candidate plans, DAX/spec proposals and explanations |
 | Fabric data access | Fabric REST APIs, Spark/PySpark, SQL analytics endpoint | Workspace/Lakehouse discovery, metadata harvesting and profiling |
 | Semantic model | TMDL generator, Power BI Authoring MCP, DAX execution and validators | Model authoring, object operations, testing and remediation |
@@ -68,6 +68,7 @@ Rayfin is the web UI and workflow control surface. It talks to an **orchestratio
 - Classify each failure as deterministic repair, LLM-assisted regeneration or user input
 - Enforce retry limits and no-progress detection
 - Record `ValidationReport.json`
+- Runs the repair loop as a LangGraph stage graph. Run-state transitions stay with the orchestration API
 
 ### Deployment Service
 - Resolve authorized target

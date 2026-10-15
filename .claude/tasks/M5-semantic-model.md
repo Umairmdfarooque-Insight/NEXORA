@@ -132,10 +132,12 @@ Each approved KPI needs a DAX measure that implements **exactly** the approved d
 - `app/model/dax_generator.py`: `propose_measure_dax(kpi: Kpi, spec: ModelSpec) -> DaxProposal`.
 - `DaxProposal` (structured LLM output): `{"measure_name": str, "dax": str, "referenced_objects": [{"table"?, "column"?, "measure"?}], "explanation": str}`.
 - `POST /runs/{id}/model/measures` returns `200 {"measures": [{"name", "dax", "status": "accepted" | "rejected", "reason"?}], "version": int}`.
+- `app/graphs/dax_measure.py`: `build_dax_measure_graph(llm=…)`, a stage graph ([CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs)). Nodes: `propose_dax → precheck_references → (retry propose_dax with the errors)`. `propose_measure_dax` invokes it once per measure.
 
 #### Constraints
 - The LLM receives only the KPI definition and the ModelSpec names and types. It never receives data values.
-- At most 2 attempts per measure at this stage. Further repair belongs to T-505.
+- At most 2 attempts per measure at this stage, enforced by the graph's attempt counter. Further repair belongs to T-505.
+- Each measure has its own graph invocation, so one rejected measure doesn't stop the others.
 - Every reference must be fully qualified (`'Table'[Column]`).
 - Use `DIVIDE()` for ratios. No hardcoded literal values unless the KPI definition states them.
 
@@ -231,6 +233,17 @@ When validation fails, rebuilding everything is wasteful and can break parts tha
 
 #### API contracts
 - `app/repair/service.py`: `repair(run_id, artifact: "SemanticModel" | "Report") -> RepairResult`.
+- `app/graphs/repair.py`: `build_repair_graph(llm=…)`, a stage graph ([CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs)):
+  - Nodes: `classify → deterministic_fix → llm_fix → scope_guard → validate → check_progress`.
+  - `check_progress` loops back to `classify`, or ends with outcome `passed` | `limit_reached` | `no_progress` | `user_input_only`.
+  - Graph state: `{run_id, artifact, version, errors, attempts, seen_fingerprints, outcome}`. `RepairResult` is built from it.
+- Run transitions are made by `repair()`, never by the graph:
+
+  | Outcome | Transitions (model; the report uses the `REPORT_*` states) |
+  |---|---|
+  | `user_input_only` before any attempt | `MODEL_FAILED → NEEDS_INPUT` |
+  | `passed` | `MODEL_FAILED → MODEL_GENERATING` (awaiting review in T-507) |
+  | `limit_reached` or `no_progress` | `MODEL_FAILED → NEEDS_INPUT`, with `resume_state: MODEL_FAILED` |
 - `RepairResult`: `{"attempts": [{"attempt", "fixed": [fingerprint], "remaining": [fingerprint], "classification": {...}, "version"}], "final_state": RunState, "message"?: str}`.
 - `POST /runs/{id}/model/repair` returns `200 RepairResult`. It's allowed in `MODEL_FAILED`.
 - Config `config/repair_policy.yaml`:
@@ -250,7 +263,8 @@ When validation fails, rebuilding everything is wasteful and can break parts tha
 #### Constraints
 - **Scope guard:** after an attempt, diff the new version against the previous one. If any file outside the failing objects changed, discard the attempt and count it as failed.
 - Deterministic fixes run before LLM fixes.
-- Every attempt is appended to `ValidationReport.json`, with its retry count.
+- Every attempt is appended to `ValidationReport.json`, with its retry count. The `validate` node does this.
+- The retry limit and the no-progress check are conditional edges on `check_progress`, not LLM decisions. `run_graph` gets a `recursion_limit` sized to `max_attempts`.
 
 #### Edge cases and error handling
 | Case | Expected behavior |
@@ -266,6 +280,7 @@ When validation fails, rebuilding everything is wasteful and can break parts tha
 2. **Escalation.** Make a KPI depend on a source column that no longer exists (a `user_input` error). **Expected:** no LLM attempts, state `NEEDS_INPUT`, and a clear message naming the column.
 3. **Retry limit.** Force a failure the LLM can't fix, such as a reconciliation tolerance of 0 with a rounding difference. **Expected:** at most 3 attempts, or an earlier no-progress stop, then `NEEDS_INPUT`.
 4. **Audit.** Open `ValidationReport.json`. **Expected:** each attempt, with its number, its fingerprints and the version written.
+5. **Graph boundary.** After AC-3, run `python -m app.cli runs show <id>`. **Expected:** the repair call added only the transitions in the outcome table, not one per attempt. The individual attempts appear only in `ValidationReport.json`.
 
 ---
 

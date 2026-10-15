@@ -152,6 +152,7 @@ A report can publish successfully but still bind to a missing measure or render 
 
 #### Constraints
 - The repair scope is one visual's folder, or one page's folder. The T-505 scope guard applies at that granularity.
+- Report repair reuses T-505's `repair` stage graph with `artifact: "Report"`. Routing a model defect to `MODEL_GENERATING` is a run transition, so the validate endpoint makes it after classifying, not a graph node ([CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs)).
 - Export needs Fabric or Premium capacity. If it isn't available, `G5.RENDER` is a `warning` with "export unavailable", not a pass.
 
 #### Edge cases and error handling

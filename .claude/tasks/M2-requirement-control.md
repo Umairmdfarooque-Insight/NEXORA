@@ -116,13 +116,19 @@ A plain-English prompt must become a draft BusinessContract. Today the LLM may s
   ```
 - `POST /runs/{run_id}/compile` returns `200 {"run": RunDetail, "contract": BusinessContract, "blocking_questions": int}`.
 - Files written: `runs/<id>/BusinessContract.yaml` (current) and `runs/<id>/contracts/BusinessContract.v<n>.yaml` (history).
+- First stage graph ([CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs)):
+  - `app/graphs/base.py`: `run_graph(...)`, as defined there.
+  - `app/graphs/compile.py`: `build_compile_graph(llm=…)`. Nodes: `llm_compile → validate_schema → (retry llm_compile with the validation errors) → apply_critical_terms → apply_locked_facts`.
+  - `compile_requirement` runs this graph. The `/compile` endpoint then writes the contract version and makes the transition.
+- Add `langgraph` to `requirements.txt`, pinned to a major version, for example `langgraph>=1.0,<2`.
 
 #### Constraints
 - Use the Responses API with JSON Schema structured output (`text.format` type `json_schema`, strict), built from T-201's schema. Then validate with pydantic.
 - Only the prompt, the subject area, the desired outputs, the constraints and the previous contract are sent to the LLM. No source data is sent (NFR-008).
 - 60-second timeout. On invalid output, retry once with the validation errors included in the prompt.
 - Compiling is allowed only in `CREATED` and `NEEDS_CLARIFICATION`.
-- The deterministic rule runs **after** the LLM, so it can't be skipped.
+- The deterministic rule runs **after** the LLM, so it can't be skipped. In the graph, `apply_critical_terms` and `apply_locked_facts` sit on every path to the end.
+- The retry is the graph's loop. The `validate_schema → llm_compile` edge allows at most 2 LLM attempts in total.
 
 #### Edge cases and error handling
 | Case | Expected behavior |
@@ -142,6 +148,7 @@ A plain-English prompt must become a draft BusinessContract. Today the LLM may s
 4. **Valid file.** Run `python -m app.cli contract validate runs/<id>/BusinessContract.yaml`. **Expected:** `VALID`.
 5. **Versioning.** Compile the same run twice. **Expected:** `contracts/BusinessContract.v1.yaml` and `.v2.yaml` exist.
 6. **Wrong state.** Use the CLI to move a run to `REQUIREMENT_APPROVED`, then compile it. **Expected:** `409 WRONG_STATE`.
+7. **Graph boundary.** After AC-1, run `python -m app.cli runs show <id>`. **Expected:** compiling added exactly one history entry (`CREATED → NEEDS_CLARIFICATION`), and the log line for the compile lists the node path, ending in `apply_locked_facts`.
 
 ---
 
@@ -171,7 +178,8 @@ Once a question is asked, the user needs a way to answer it. The answer must the
 #### Constraints
 - Answers and edits are allowed only while `status: draft`, in states `CREATED` and `NEEDS_CLARIFICATION`.
 - `expected_hash` provides optimistic concurrency. If it doesn't match the current contract hash, the request returns `409 STALE_VERSION`.
-- Recompiling after an answer follows T-202's constraints.
+- Recompiling after an answer follows T-202's constraints, and re-runs the `compile` graph.
+- The back-and-forth with the user is a run-layer loop (`NEEDS_CLARIFICATION ⇄ CREATED`), not a paused graph. Each answer is a new API call that starts a new graph invocation ([CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs), rule 4).
 
 #### Edge cases and error handling
 | Case | Expected behavior |

@@ -69,6 +69,38 @@ These are the states from spec §11. Only these transitions are allowed. Anythin
 
 `CREATED` doubles as "requirement draft without blocking questions". The spec has no separate state for it.
 
+## Stage graphs
+
+Orchestration is **hybrid**, with two layers:
+
+| Layer | Built with | Owns |
+|---|---|---|
+| Run layer | The state machine and `RunStore` (T-101) | Run state, the transitions above, approvals, `history` and the audit trail. Waiting for a person (clarification, approval, `NEEDS_INPUT`) is always a run state. |
+| Stage layer | A LangGraph `StateGraph` per stage | The LLM loop inside one stage call: propose, validate, retry or repair, then return a result |
+
+A stage service (called from an API endpoint) checks the run state, invokes the stage graph, runs the gate on the result, and then makes the transition through `RunStore`.
+
+Rules for every stage graph:
+1. **No run-state writes.** A graph never calls `RunStore.transition` or `RunStore.save`, and never writes `RunManifest.json`. Nodes may write new versioned artifact files and append to `ValidationReport.json`. The stage service registers the artifact in the manifest after the graph returns.
+2. **Deterministic routing.** Conditional edges route only on validator output (pass or fail, error codes, fingerprints, attempt counts), never on free LLM text.
+3. **Bounded loops.** Every cycle has an `attempt` counter in the graph state, checked by a conditional edge against the task's limit. `run_graph` also passes a `recursion_limit`. A `GraphRecursionError` is a bug and returns `500 INTERNAL_ERROR`.
+4. **Short-lived.** A graph finishes within the call that started it. No `interrupt()` and no persistent checkpointer. Graphs are compiled without a checkpointer. After a person responds, the next API call starts a new graph invocation from the run's artifacts.
+5. **Shared LLM client.** LLM nodes call `app/llm/client.py`, so the T-705 payload guard and T-704 metrics apply. Don't use LangChain chat-model classes. The only new dependency is `langgraph`.
+6. **No external tracing.** LangSmith tracing (`LANGSMITH_TRACING`, `LANGCHAIN_TRACING_V2`) stays off, because prompts and metadata must not leave the tenant (NFR-008). Tracing goes through T-704.
+7. **Testable.** The LLM call is passed into `build_<name>_graph(llm=…)`, so a test can swap in a fake and check the node path without Azure.
+
+Layout:
+- `app/graphs/base.py`: `run_graph(graph, state: dict, *, run_id: str, stage: str, recursion_limit: int = 25) -> dict`. It invokes the graph with `config={"recursion_limit": …, "metadata": {"run_id": …, "stage": …}}`, records the node path, and converts `GraphRecursionError` to `INTERNAL_ERROR`. T-202 adds it.
+- `app/graphs/<name>.py`: `build_<name>_graph(llm=…) -> CompiledStateGraph`, with the graph state as a `TypedDict`.
+
+| Graph | Task | Nodes and loop | Bound |
+|---|---|---|---|
+| `compile` | T-202, reused by T-203 | `llm_compile → validate_schema → (retry llm_compile with errors) → apply_critical_terms → apply_locked_facts` | 2 LLM attempts |
+| `dax_measure` | T-503 | `propose_dax → precheck_references → (retry propose_dax with errors)`, one invocation per measure | 2 attempts per measure |
+| `repair` | T-505, reused by T-603 | `classify → deterministic_fix → llm_fix → scope_guard → validate → check_progress → (loop to classify, or stop)` | `max_attempts` from `config/repair_policy.yaml`. Also stops when there's no progress or only `user_input` errors remain |
+
+Use plain functions, not a graph, for stages with no loop (for example T-301, T-302 and T-303).
+
 ## Error envelope
 
 Every API error uses this body:

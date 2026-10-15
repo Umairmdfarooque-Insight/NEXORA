@@ -166,10 +166,11 @@ There's no way to tell how long each stage took, how many retries happened, or w
 2. Record a span per stage, with its duration, outcome and attempt number.
 3. Record metrics: stage duration, error count, retry count, validation pass or fail, LLM input and output tokens, and LLM cost.
 4. Export to Application Insights, or to the console in local development.
+5. For stages with a stage graph, `run_graph` (`app/graphs/base.py`) records a child span for each node it runs, with the attempt number. A repair attempt therefore shows up as its own span under `stage.model.repair`.
 
 #### API contracts
 - Settings: `OTEL_EXPORTER` (`console` | `azuremonitor`) and `APPLICATIONINSIGHTS_CONNECTION_STRING`.
-- Span names: `stage.<name>`, for example `stage.compile` or `stage.model.validate`. Attributes: `run_id`, `stage`, `attempt` and `outcome`.
+- Span names: `stage.<name>`, for example `stage.compile` or `stage.model.validate`. Graph nodes add `stage.<name>.node.<node>`, for example `stage.compile.node.llm_compile`. Attributes: `run_id`, `stage`, `attempt` and `outcome`.
 - Metrics:
 
   | Metric | Unit |
@@ -225,7 +226,8 @@ Secrets are still in `.env`. Run access isn't scoped to authorized users, and no
 #### Constraints
 - No secret values in `.env.example`, logs or errors.
 - Fail fast at startup if Key Vault is configured but unreachable.
-- The guard runs in the shared LLM client, so no code path can skip it.
+- The guard runs in the shared LLM client, so no code path can skip it. Stage graph nodes call that client too ([CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs), rule 5).
+- Startup fails with `CONFIG_ERROR` if `LANGSMITH_TRACING` or `LANGCHAIN_TRACING_V2` is `true`, because LangSmith would send prompts and metadata outside the tenant (rule 6).
 
 #### Edge cases and error handling
 | Case | Expected behavior |
@@ -240,6 +242,7 @@ Secrets are still in `.env`. Run access isn't scoped to authorized users, and no
 2. **Run isolation.** As user B, with no access to user A's workspace, call `GET /runs/<A's run>`. **Expected:** `403`.
 3. **Guard blocks rows.** In a test, call the LLM client with a payload that contains a list of 10 row dictionaries. **Expected:** `PayloadRejected`, and no request is sent. Confirm in the logs.
 4. **Payload log.** Review the payload log for a full run. **Expected:** only allowed shapes, with their sizes.
+5. **LangSmith blocked.** Set `LANGSMITH_TRACING=true` in `.env` and start the API. **Expected:** it exits with `CONFIG_ERROR` naming the setting. Remove the line afterwards.
 
 ---
 

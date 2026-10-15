@@ -31,7 +31,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | Decision | Default used in this plan | First needed at |
 |---|---|---|
 | Backend runtime | Python FastAPI (matches the existing `app/` code) | T-102 |
-| Orchestration | Explicit state machine (simpler to test than LangGraph) | T-101 |
+| Orchestration | **Decided: hybrid.** An explicit state machine with `RunStore` owns run state, approvals and audit. LangGraph stage graphs run the LLM loops inside a stage. See [CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs). | T-101 (state machine), T-202 (first stage graph) |
 | Control store | Local file store under `runs/<run_id>/` behind a store interface, swappable for Fabric SQL Database later | T-101 |
 | Model authoring route | Canonical TMDL files generated deterministically; MCP optional later | T-502 |
 | Report authoring route | Deterministic PBIR generator | T-602 |

@@ -40,6 +40,7 @@ The existing pipeline stages are disconnected scripts with no notion of a run. N
 - `runs/` is gitignored.
 - The store is the only code that writes manifests. Other modules call the store.
 - No database yet. The file store sits behind the `RunStore` interface, so a Fabric SQL store can replace it later (open decision).
+- This is the run layer of the hybrid orchestration ([CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs)). Don't use LangGraph here. `RunStore` stays the only source of truth for run state, even after stage graphs are added.
 
 #### Edge cases and error handling
 | Case | Expected behavior |
@@ -112,6 +113,7 @@ App: `app/api/main.py`. Start it with `uvicorn app.api.main:app --reload --port 
 #### Constraints
 - Route handlers contain no business logic. They call `RunStore` and the domain services.
 - There is no public endpoint for arbitrary state transitions. States change only through the domain endpoints added in later tasks.
+- Pattern for those later endpoints: the handler calls a stage service. The service checks the state, runs the stage graph if the stage has one, runs the gate, and then transitions through `RunStore` ([CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs)).
 - CORS allows `http://localhost:3000` (Rayfin, from T-104) only.
 - No authentication yet. T-105 adds it, so run the API locally only.
 

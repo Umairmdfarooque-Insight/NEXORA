@@ -46,12 +46,12 @@ Status values: Not started / In progress / Done.
 
 ## Open Decisions
 
-All decisions are currently **Open** with no owner assigned.
+All decisions except Orchestration are currently **Open** with no owner assigned.
 
 | Decision | Options / Question |
 |---|---|
 | Backend runtime | Python FastAPI or .NET? |
-| Orchestration | LangGraph or explicit state machine? |
+| Orchestration | **Decided: hybrid.** An explicit run state machine with the control store owns run state, approvals and audit. LangGraph stage graphs run the bounded LLM loops inside a stage (compile, DAX generation, repair). See [CONTRACTS.md#stage-graphs](../tasks/CONTRACTS.md#stage-graphs). |
 | Control store | Fabric SQL Database, Warehouse or other approved store? |
 | Model authoring route | Canonical TMDL files, MCP object operations, or combined approach? |
 | Report authoring route | PBIR generator, report skill/CLI, or combined approach? |
