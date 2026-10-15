@@ -52,9 +52,32 @@ Run the SQL checks in the Lakehouse **SQL endpoint** of the sandbox.
 
 ---
 
+## M1 — Foundation
+
+### T-101 — Run model, state machine and run store
+
+Steps 1–7 and 11, 13 and 14 run offline with the file store (`RUN_STORE=file`, the default). Replace `<id>` with the `run_id` printed by step 1. Steps 8–10 and 12 need a writable Fabric SQL Database in the sandbox workspace; fill `FABRIC_CONTROL_DB_SERVER` and `FABRIC_CONTROL_DB_NAME` in `.env` first.
+
+1. 💻 **Create.** `python -m app.cli runs create --prompt "Total sales by month"`. **Expected:** a UUID is printed, and `runs\<id>\RunManifest.json` exists with `"state": "CREATED"` and one history entry.
+2. 💻 **Unique IDs.** Repeat step 1. **Expected:** a different `run_id`.
+3. 💻 **Illegal transition blocked.** `python -m app.cli runs transition <id> DEPLOYING; echo $LASTEXITCODE`. **Expected:** `CREATED → DEPLOYING is not allowed`, exit `1`, and `runs show <id>` still shows `CREATED`.
+4. 💻 **Legal transition recorded.** `python -m app.cli runs transition <id> NEEDS_CLARIFICATION --reason test`, then `python -m app.cli runs show <id>`. **Expected:** state `NEEDS_CLARIFICATION`, and a second history entry with reason `test` and a timestamp.
+5. 💻 **Needs-input resume.** `python -m app.cli runs transition <id> NEEDS_INPUT`, then `runs show <id>`. **Expected:** `resume_state` is `NEEDS_CLARIFICATION`. Then `python -m app.cli runs transition <id> RESUME`. **Expected:** the state is `NEEDS_CLARIFICATION` again and `resume_state` is `null`.
+6. 💻 **Persistence.** Close the terminal, open a new one (activate the venv), and run `python -m app.cli runs show <id>`. **Expected:** the same state and history.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t101_offline_checks`. **Expected:** only `PASS` lines and `All checks passed.` (the SQL store runs against an in-memory SQLite stand-in, so this checks its logic, not Fabric access).
+8. 🌐 **Fabric SQL store, create and read.** In `.env` set `RUN_STORE=fabric_sql`. Run `python -m app.cli runs create --prompt "Total sales by month"`, then `runs list` and `runs show <id>`. **Expected:** a UUID, the run listed, and its manifest shown. In the database, `SELECT run_id, state FROM dbo.nexora_runs` returns the same run.
+9. 🌐 **Fabric SQL store, same rules.** With `RUN_STORE=fabric_sql`, repeat steps 3, 4 and 5 on the new run. **Expected:** the same results as the file store, and the `state` column in `dbo.nexora_runs` matches `runs show`.
+10. 🌐 **Fabric SQL store, persistence.** Open a new terminal and run `runs show <id>`. **Expected:** the same state and history. Runs from the file store are not listed.
+11. 💻 **Missing setting.** With `RUN_STORE=fabric_sql`, blank `FABRIC_CONTROL_DB_NAME` and run `python -m app.cli runs list; echo $LASTEXITCODE`. **Expected:** `Missing required configuration: FABRIC_CONTROL_DB_NAME`, exit `2`. **Restore it.**
+12. 🌐 **Unreachable database.** With `RUN_STORE=fabric_sql`, set `FABRIC_CONTROL_DB_SERVER=invalid.example.com` and run `runs list; echo $LASTEXITCODE`. **Expected:** a readable "Cannot connect" message, exit `1`, no traceback. **Restore it.**
+13. 💻 **Bad store name.** `$env:RUN_STORE="nope"; python -m app.cli runs list; echo $LASTEXITCODE`, then `Remove-Item Env:RUN_STORE`. **Expected:** `Invalid RUN_STORE: 'nope'. Valid values: file, fabric_sql`, exit `2`.
+14. 💻 **Clean up.** Set `RUN_STORE=file` in `.env` and delete the `runs\` folder. Optionally remove test rows with `DELETE FROM dbo.nexora_runs` in the sandbox database.
+
+---
+
 ## M1 onward
 
-Sections for T-101 and later are added when each task is implemented.
+Sections for T-102 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -63,6 +86,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | Script | Task | Purpose |
 |---|---|---|
 | `app/manual_tests/t002_check.py` | T-002 | One sign-in for the Lakehouse and SQL connectors |
+| `app/manual_tests/t101_offline_checks.py` | T-101 | Offline checks of the state table, file store and SQL store logic |
 
 ## Adding a task
 

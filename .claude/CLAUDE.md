@@ -34,6 +34,7 @@ Windows; a virtualenv lives in `.venv` (Python 3.12). A `.venv` copied from anot
 pip install -r requirements.txt           # lists every third-party package the code imports
 python -m app.test_requirement_analyzer   # run one script
 python -m app.tools.smoke [--only llm,lakehouse,sql] [--json]   # check LLM, Lakehouse and SQL access; exit 0/1/2
+python -m app.cli runs create --prompt "..."   # also: list, show RUN_ID, transition RUN_ID STATE (exit 0/1/2)
 ```
 
 - Test data for the acceptance scenarios lives in schema `nexora_test` of the sandbox Lakehouse. It is created by the Spark notebook `fixtures/create_test_tables.ipynb` (see `fixtures/README.md`), not by Python in `app/`. `python -m app.test_metadata_inventory [schema]` lists a schema's tables (default `saleslt`).
@@ -41,6 +42,10 @@ python -m app.tools.smoke [--only llm,lakehouse,sql] [--json]   # check LLM, Lak
 - Run them as modules from the project root (`python -m app.test_x`). Imports are absolute (`from app.config import ...`), so running the file directly will fail.
 - Running anything needs a `.env` (copy `.env.example`). `app/config.py` loads `PROJECT_ROOT/.env` once (shell variables win over `.env`, so the working directory doesn't matter) and calls `get_required_setting` at import time for `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT` and `AZURE_OPENAI_API_KEY`, so importing `app.config` raises `ValueError` if any is missing. That includes the connector modules. The Fabric settings (`FABRIC_*`) are optional: `get_optional_setting` returns `None` when they are unset or blank.
 - Fabric access goes through `app/auth.py`: one process-wide `InteractiveBrowserCredential` with an on-disk token cache (`TokenCachePersistenceOptions(name="nexora")`), plus a saved sign-in record (`%LOCALAPPDATA%\.IdentityService\nexora_auth_record.json`, account identifiers only, no tokens), so a process signs in once and later runs read the cache silently. Delete that file to force a fresh sign-in. Connectors call `get_token(STORAGE_SCOPE | SQL_SCOPE | FABRIC_SCOPE)`; never create a credential elsewhere. `fabric_sql_connector` also needs the ODBC Driver 18 for SQL Server installed.
+
+## Runs
+
+`app/workflow/` holds the run states (`states.py`) and the `Run` model with the single `apply_transition` function (`run.py`). `app/store/` holds the `RunStore` interface (`base.py`), the default `FileRunStore` (`runs/<run_id>/RunManifest.json`, gitignored) and `SqlRunStore` (table `dbo.nexora_runs` in a writable Fabric SQL Database). `RUN_STORE=file|fabric_sql` picks the store through `get_run_store()`; `fabric_sql` also needs `FABRIC_CONTROL_DB_SERVER` and `FABRIC_CONTROL_DB_NAME`. Only the store writes manifests.
 
 ## Architecture
 
