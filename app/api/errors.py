@@ -38,6 +38,7 @@ from app.workflow.approval import (
     UnknownArtifact,
     UnsupportedAction,
 )
+from app.discovery.model_planner import NoFeasibleKpis
 from app.workflow.bridge_stage import MappingRulesRequired
 from app.workflow.clarification import ContractLocked, NotFound, QuestionConflict, StaleVersion
 from app.workflow.compile_stage import WrongState
@@ -184,6 +185,10 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"expected_hash": exc.expected, "current_hash": exc.current},
         )
+
+    @app.exception_handler(NoFeasibleKpis)
+    async def no_feasible_kpis(request: Request, exc: NoFeasibleKpis):
+        return error_response(409, "NO_FEASIBLE_KPIS", str(exc))
 
     @app.exception_handler(MappingRulesRequired)
     async def mapping_rules_required(request: Request, exc: MappingRulesRequired):

@@ -65,7 +65,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-401 | Entity-to-source mapping and conformed-table resolver | [M4 Planning](M4-planning.md) | Done | task/T-401-entity-source-mapping-conformed-resolver |
 | T-402 | KPI feasibility and Data Gap | M4 | Done | task/T-402-kpi-feasibility-and-data-gap |
 | T-403 | Bridge-table detection and proposal | M4 | Done | task/T-403-bridge-table-detection-proposal |
-| T-404 | ExecutionPlan and ModelSpec generation | M4 | Not started |  |
+| T-404 | ExecutionPlan and ModelSpec generation | M4 | Done | task/T-404-executionplan-modelspec-generation |
 | T-405 | Gate G3 and plan review UI | M4 | Not started |  |
 | T-501 | Sandbox deployment client | [M5 Semantic model](M5-semantic-model.md) | Not started |  |
 | T-502 | TMDL generator | M5 | Not started |  |

@@ -6,6 +6,7 @@ from typing import Annotated, Any
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
 from app.contracts.business_contract import BusinessContract, ExpectedExample, Feasibility
+from app.contracts.model_plan import ExecutionPlan, ModelSpec
 from app.workflow.approval import Action, ApprovalRecord
 from app.workflow.gates import GateResult
 from app.workflow.inventory_review import DataGap
@@ -96,6 +97,12 @@ class CompileResponse(BaseModel):
 class FeasibilityResponse(BaseModel):
     kpis: list[Feasibility]
     run: RunDetail
+
+
+class PlanResponse(BaseModel):
+    execution_plan: ExecutionPlan
+    model_spec: ModelSpec
+    validation: GateResult
 
 
 class MeResponse(BaseModel):

@@ -35,6 +35,7 @@ from app.api.schemas import (
     KpiEditRequest,
     KpiEditResponse,
     ProfileRequest,
+    PlanResponse,
     ProfileResponse,
     QuestionResponse,
     RunDetail,
@@ -71,6 +72,7 @@ from app.contracts.source_resolution import SourceResolution
 from app.contracts.bridge_proposal import BridgeProposal
 from app.workflow.bridge_stage import propose_bridges
 from app.workflow.feasibility_stage import check_feasibility
+from app.workflow.plan_stage import generate_plan, read_plan
 from app.workflow.scope import bind_scope
 from app.workflow.source_stage import resolve_sources
 from app.workflow.states import RunState
@@ -412,6 +414,26 @@ def plan_bridges(
 ):
     proposals, _ = propose_bridges(store, runs_root, run_id, sql_connector_for_scope, actor=user.upn)
     return proposals.proposals
+
+
+@router.post("/{run_id}/plan", response_model=PlanResponse, response_model_by_alias=True)
+def plan(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    execution_plan, model_spec, validation = generate_plan(store, runs_root, run_id)
+    return PlanResponse(execution_plan=execution_plan, model_spec=model_spec, validation=validation)
+
+
+@router.get("/{run_id}/plan", response_model=PlanResponse, response_model_by_alias=True)
+def get_plan(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    execution_plan, model_spec, validation = read_plan(store, runs_root, run_id)
+    return PlanResponse(execution_plan=execution_plan, model_spec=model_spec, validation=validation)
 
 
 @router.get("/{run_id}/inventory", response_model=MetadataInventory, response_model_by_alias=True)
