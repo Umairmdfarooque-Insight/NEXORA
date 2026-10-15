@@ -1,0 +1,136 @@
+"""The Run model (CONTRACTS.md#run) and the one function that changes its state."""
+
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from app.workflow.states import RunState, can_transition
+
+SCHEMA_VERSION = 1
+MAX_PROMPT_LENGTH = 10_000
+
+
+class IllegalTransition(Exception):
+    def __init__(self, from_: RunState, to: RunState):
+        self.from_ = from_
+        self.to = to
+        super().__init__(f"{from_.value} → {to.value} is not allowed")
+
+
+class HistoryEntry(BaseModel):
+    from_: RunState | None = Field(default=None, alias="from")
+    to: RunState
+    at: str
+    reason: str
+    actor: str
+
+    model_config = {"populate_by_name": True}
+
+
+class ArtifactRef(BaseModel):
+    path: str
+    version: int
+    hash: str
+    status: str
+    based_on: dict[str, str] = Field(default_factory=dict)
+    updated_at: str
+
+
+class Run(BaseModel):
+    schema_version: int = SCHEMA_VERSION
+    run_id: str
+    prompt: str
+    subject_area: str | None = None
+    desired_outputs: list[str] = Field(default_factory=list)
+    constraints: list[str] = Field(default_factory=list)
+    state: RunState = RunState.CREATED
+    resume_state: RunState | None = None
+    scope: dict[str, Any] | None = None
+    created_by: dict[str, Any] | None = None
+    created_at: str
+    updated_at: str
+    history: list[HistoryEntry] = Field(default_factory=list)
+    artifacts: dict[str, ArtifactRef] = Field(default_factory=dict)
+    deployment: dict[str, Any] | None = None
+
+    def to_json(self) -> str:
+        return self.model_dump_json(by_alias=True, indent=2)
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def validate_prompt(prompt: str) -> str:
+    if prompt is None or not prompt.strip():
+        raise ValueError("Prompt cannot be empty")
+    prompt = prompt.strip()
+    if len(prompt) > MAX_PROMPT_LENGTH:
+        raise ValueError(
+            f"Prompt is too long ({len(prompt)} characters). "
+            f"The limit is {MAX_PROMPT_LENGTH} characters."
+        )
+    return prompt
+
+
+def new_run(
+    prompt: str,
+    subject_area: str | None = None,
+    desired_outputs=(),
+    constraints=(),
+    actor: str = "system",
+) -> Run:
+    prompt = validate_prompt(prompt)
+    now = utc_now()
+    return Run(
+        run_id=str(uuid.uuid4()),
+        prompt=prompt,
+        subject_area=subject_area,
+        desired_outputs=list(desired_outputs),
+        constraints=list(constraints),
+        created_at=now,
+        updated_at=now,
+        history=[
+            HistoryEntry(
+                from_=None,
+                to=RunState.CREATED,
+                at=now,
+                reason="Run created",
+                actor=actor,
+            )
+        ],
+    )
+
+
+def apply_transition(
+    run: Run, to: RunState | None, reason: str, actor: str = "system"
+) -> Run:
+    """Return a copy of `run` moved to `to`, or raise IllegalTransition.
+
+    `to=None` is only valid from NEEDS_INPUT and means "return to the stored
+    resume_state". The input run is never modified, so a rejected transition
+    leaves state and history unchanged.
+    """
+    from_ = run.state
+    if to is None:
+        if from_ is not RunState.NEEDS_INPUT:
+            raise ValueError("A target state is required unless the run is NEEDS_INPUT")
+        to = run.resume_state or RunState.CREATED
+
+    if not can_transition(from_, to, run.resume_state):
+        raise IllegalTransition(from_, to)
+
+    now = utc_now()
+    updated = run.model_copy(deep=True)
+    updated.state = to
+    if to is RunState.NEEDS_INPUT:
+        updated.resume_state = from_
+    elif from_ is RunState.NEEDS_INPUT:
+        updated.resume_state = None
+    updated.updated_at = now
+    updated.history.append(
+        HistoryEntry(from_=from_, to=to, at=now, reason=reason, actor=actor)
+    )
+    return updated

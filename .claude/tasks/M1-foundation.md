@@ -17,6 +17,7 @@ The existing pipeline stages are disconnected scripts with no notion of a run. N
 3. Runs are persisted, survive process restarts, and can be listed and loaded.
 4. Moving to `NEEDS_INPUT` stores `resume_state`. Leaving `NEEDS_INPUT` without naming a state returns to it.
 5. A CLI exposes create, list, show and transition, for testing before the API exists.
+6. A second store, `SqlRunStore`, keeps runs in a Fabric SQL Database behind the same `RunStore` interface. The `RUN_STORE` setting (`file` default, or `fabric_sql`) picks the store.
 
 #### API contracts
 - `app/workflow/states.py`: `class RunState(str, Enum)` with the 15 states, `ALLOWED: dict[RunState, set[RunState]]`, and `can_transition(a, b) -> bool`.
@@ -28,6 +29,8 @@ The existing pipeline stages are disconnected scripts with no notion of a run. N
   - `save(run: Run) -> None`
   - `transition(run_id, to: RunState, reason: str, actor: str = "system") -> Run`, which raises `IllegalTransition(from_, to)`
 - `app/store/file_store.py`: `FileRunStore(root: Path = PROJECT_ROOT / "runs")` writes `runs/<run_id>/RunManifest.json`.
+- `app/store/sql_store.py`: `SqlRunStore(server, database)` keeps one row per run in `dbo.nexora_runs` (`run_id` PK, `state`, `created_at`, `updated_at`, `version`, `manifest` JSON). It creates the table on first use and uses a `version` check so two writers can't silently overwrite each other.
+- `app/store/factory.py`: `get_run_store()` reads `RUN_STORE`, and for `fabric_sql` also `FABRIC_CONTROL_DB_SERVER` and `FABRIC_CONTROL_DB_NAME` from `.env`.
 - CLI `python -m app.cli runs …`:
   - `create --prompt TEXT [--subject-area S] [--output O]… [--constraint C]…` prints the `run_id`.
   - `list [--state STATE]` prints a table of `run_id`, `state`, `created_at` and the first 40 characters of the prompt.
@@ -39,7 +42,7 @@ The existing pipeline stages are disconnected scripts with no notion of a run. N
 - Writes are atomic: write `RunManifest.json.tmp`, then `os.replace` it.
 - `runs/` is gitignored.
 - The store is the only code that writes manifests. Other modules call the store.
-- No database yet. The file store sits behind the `RunStore` interface, so a Fabric SQL store can replace it later (open decision).
+- The file store is the default. The Fabric SQL store must target a writable Fabric *SQL Database*, never the read-only Lakehouse SQL endpoint, and only in the sandbox workspace. Its connection settings come from `.env`; never print them.
 - This is the run layer of the hybrid orchestration ([CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs)). Don't use LangGraph here. `RunStore` stays the only source of truth for run state, even after stage graphs are added.
 
 #### Edge cases and error handling
@@ -52,6 +55,10 @@ The existing pipeline stages are disconnected scripts with no notion of a run. N
 | Transition to the current state | Treated as illegal, so no duplicate history entries are created. |
 | Corrupt or partial `RunManifest.json` | `get` raises `RunCorrupt(run_id)`. `list` skips that run and logs a warning. |
 | `runs/` folder missing | Created on first write. |
+| `RUN_STORE` is not `file` or `fabric_sql` | `ValueError` naming the valid values, and the CLI exits `2`. |
+| `RUN_STORE=fabric_sql` with a control-database setting blank | `ValueError: Missing required configuration: <name>`, and the CLI exits `2`. |
+| Control database unreachable or permission denied | `StoreUnavailable`. The CLI prints the reason and exits `1`. |
+| Another writer changes a run during a transition | The SQL store re-reads and re-validates, up to 3 times, then raises `StoreUnavailable`. |
 
 #### Acceptance criteria
 1. **Create.** Run `python -m app.cli runs create --prompt "Total sales by month"`. **Expected:** a UUID is printed, and `runs/<id>/RunManifest.json` exists with `"state": "CREATED"` and one history entry.
@@ -60,6 +67,12 @@ The existing pipeline stages are disconnected scripts with no notion of a run. N
 4. **Legal transition recorded.** Run `runs transition <id> NEEDS_CLARIFICATION --reason test`, then `runs show <id>`. **Expected:** the state is `NEEDS_CLARIFICATION`, and history has a second entry with your reason and a timestamp.
 5. **Needs-input resume.** Run `runs transition <id> NEEDS_INPUT`, then `runs show <id>`. **Expected:** `resume_state` is `NEEDS_CLARIFICATION`.
 6. **Persistence.** Close the terminal, open a new one, and run `runs show <id>`. **Expected:** the same state and history.
+7. **Fabric SQL store, create and read.** Set `RUN_STORE=fabric_sql` and the two `FABRIC_CONTROL_DB_*` values, then run `runs create`, `runs list` and `runs show <id>`. **Expected:** the run appears in `runs list` and `show`, and `SELECT run_id, state FROM dbo.nexora_runs` in the database returns it.
+8. **Fabric SQL store, same rules.** Repeat AC-3 to AC-5 with `RUN_STORE=fabric_sql`. **Expected:** the same results as the file store, and the `state` column in `dbo.nexora_runs` matches `runs show`.
+9. **Fabric SQL store, persistence.** Open a new terminal and run `runs show <id>` again with `RUN_STORE=fabric_sql`. **Expected:** the same state and history. Runs created with the file store do not appear (the stores are separate).
+10. **Missing setting.** With `RUN_STORE=fabric_sql`, blank `FABRIC_CONTROL_DB_NAME` and run `runs list`. **Expected:** `Missing required configuration: FABRIC_CONTROL_DB_NAME`, exit `2`, no traceback. Restore it afterwards.
+11. **Unreachable database.** With `RUN_STORE=fabric_sql`, set `FABRIC_CONTROL_DB_SERVER=invalid.example.com` and run `runs list`. **Expected:** a readable "Cannot connect" message, exit `1`, no traceback. Restore it afterwards.
+12. **Bad store name.** Run `$env:RUN_STORE="nope"; python -m app.cli runs list`. **Expected:** `Invalid RUN_STORE: 'nope'. Valid values: file, fabric_sql`, exit `2`.
 7. **Corrupt file tolerated.** Copy a run folder, truncate its manifest to `{`, and run `runs list`. **Expected:** the other runs are listed and a warning names the corrupt run.
 
 ---

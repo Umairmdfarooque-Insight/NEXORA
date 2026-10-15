@@ -9,6 +9,16 @@ from app.config import (
 
 
 class FabricSQLConnector:
+    """Connects to a Fabric SQL endpoint.
+
+    Defaults to the Lakehouse endpoint from FABRIC_SQL_*. Pass `server` and
+    `database` to reach another one, such as the control database.
+    """
+
+    def __init__(self, server: str | None = None, database: str | None = None):
+        self.server = server or FABRIC_SQL_SERVER
+        self.database = database or FABRIC_SQL_DATABASE
+
     def connect(self):
         token = get_token(SQL_SCOPE)
 
@@ -22,8 +32,8 @@ class FabricSQLConnector:
 
         connection_string = (
             "Driver={ODBC Driver 18 for SQL Server};"
-            f"Server=tcp:{FABRIC_SQL_SERVER},1433;"
-            f"Database={FABRIC_SQL_DATABASE};"
+            f"Server=tcp:{self.server},1433;"
+            f"Database={self.database};"
             "Encrypt=yes;"
             "TrustServerCertificate=no;"
             "Connection Timeout=30;"
