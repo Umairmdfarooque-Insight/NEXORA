@@ -70,6 +70,9 @@ CLI:
   - `status: approved` requires no open blocking question, and every KPI must have `formula_intent`, `grain` and `currency`.
 - Saving is deterministic: keys in a fixed order, UTF-8, LF line endings.
 - No LLM involvement in this task.
+- Also enforced: a locked fact's `source_question_id` must name an existing question. `locked_at` stays text (ISO 8601) so it round-trips exactly. `Feasibility` has the shape T-402 documents (`kpi`, `status`, `needed`, `missing`, `options`); T-402 fills it.
+- `python -m app.cli contract schema --output FILE` writes the schema as UTF-8 with LF. Use it instead of `>`, because PowerShell's `>` saves UTF-16.
+- `samples/contract_valid.yaml` is written in the canonical form `save()` produces (block style), so the round trip in AC 4 gives no diff. `schemas/business_contract.schema.json` is committed; regenerate it whenever the models change.
 
 #### Edge cases and error handling
 | Case | Expected behavior |

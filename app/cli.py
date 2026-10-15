@@ -1,8 +1,10 @@
-"""Nexora command line. Usage: python -m app.cli runs <command> ..."""
+"""Nexora command line. Usage: python -m app.cli runs|contract <command> ..."""
 
 import argparse
+import json
 import sys
 
+from app.contracts import business_contract
 from app.store.base import (
     IllegalTransition,
     RunCorrupt,
@@ -40,6 +42,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "state", help=f"A run state, or {RESUME} to leave NEEDS_INPUT"
     )
     transition.add_argument("--reason", default="Manual transition")
+
+    contract = groups.add_parser("contract", help="Validate BusinessContract files")
+    contract_cmds = contract.add_subparsers(dest="command", required=True)
+    validate = contract_cmds.add_parser("validate", help="Check a BusinessContract.yaml file")
+    validate.add_argument("file")
+    schema = contract_cmds.add_parser("schema", help="Print the BusinessContract JSON Schema")
+    schema.add_argument("--output", help="Write the schema to this file (UTF-8, LF) instead of printing")
     return parser
 
 
@@ -49,6 +58,30 @@ def _parse_state(value: str) -> RunState:
     except ValueError:
         valid = ", ".join(s.value for s in RunState)
         raise ValueError(f"Invalid state: {value!r}. Valid states: {valid}") from None
+
+
+def _contract_command(args) -> int:
+    if args.command == "schema":
+        text = json.dumps(business_contract.json_schema(), indent=2) + "\n"
+        if args.output:
+            # Written as bytes: PowerShell's ">" would save UTF-16.
+            with open(args.output, "wb") as handle:
+                handle.write(text.encode("utf-8"))
+        else:
+            print(text, end="")
+        return 0
+    try:
+        business_contract.load(args.file)
+    except FileNotFoundError:
+        print(f"File not found: {args.file}", file=sys.stderr)
+        return 2
+    except business_contract.ContractInvalid as exc:
+        print("INVALID")
+        for issue in exc.issues:
+            print(issue)
+        return 1
+    print("VALID")
+    return 0
 
 
 def _run_command(args) -> int:
@@ -86,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
         stream.reconfigure(encoding="utf-8")  # state messages contain "→"
 
     args = _build_parser().parse_args(argv)  # bad arguments exit 2
+    if args.group == "contract":
+        return _contract_command(args)
     try:
         return _run_command(args)
     except ValueError as exc:  # bad prompt, bad state name, bad RUN_STORE
