@@ -20,7 +20,7 @@ from app.contracts.metadata_inventory import (
     ProfileEvidence,
     TableProfile,
 )
-from app.discovery.requirement_data_matcher import ALIASES, normalize
+from app.discovery.glossary import load_glossary, normalize
 from app.workflow.run import utc_now
 
 QUERY_TIMEOUT_SECONDS = 120
@@ -100,13 +100,13 @@ def classify_error(exc: Exception) -> tuple[str, str]:
 
 def matching_keys(contract: Any, keys: list[str]) -> list[str]:
     """The "schema.table" names in `keys` whose table part matches a contract entity, using
-    the matcher's ALIASES and name normalization. Deterministic; no LLM."""
+    the glossary (config/glossary.yaml) and name normalization. Deterministic; no LLM."""
     if contract is None:
         return []
+    glossary = load_glossary()
     found: list[str] = []
     for entity in contract.entities:
-        aliases = ALIASES.get(entity.strip().lower()) or ALIASES.get(normalize(entity)) or [entity]
-        aliases = [a for a in (normalize(a) for a in aliases) if a]
+        aliases = glossary.aliases_for(entity)
         for key in keys:
             name = normalize(key.partition(".")[2])
             if key not in found and any(alias in name for alias in aliases):

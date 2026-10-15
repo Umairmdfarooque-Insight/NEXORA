@@ -10,6 +10,7 @@ from app.api.deps import (
     get_llm,
     get_relationship_llm,
     get_runs_root,
+    get_source_llm,
     get_sql_connector_factory,
     get_store,
 )
@@ -64,7 +65,9 @@ from app.discovery.relationship_candidates import Candidate
 from app.workflow.profile_stage import profile_run, summarize
 from app.workflow.relationship_stage import analyze_run, list_relationships
 from app.workflow.relationship_stage import summarize as summarize_relationships
+from app.contracts.source_resolution import SourceResolution
 from app.workflow.scope import bind_scope
+from app.workflow.source_stage import resolve_sources
 from app.workflow.states import RunState
 
 router = APIRouter(
@@ -370,6 +373,16 @@ def get_relationships(
 ):
     store.get(run_id)
     return list_relationships(runs_root, run_id)
+
+
+@router.post("/{run_id}/plan/sources", response_model=SourceResolution)
+def plan_sources(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    llm=Depends(get_source_llm),
+):
+    return resolve_sources(store, runs_root, run_id, llm)
 
 
 @router.get("/{run_id}/inventory", response_model=MetadataInventory, response_model_by_alias=True)

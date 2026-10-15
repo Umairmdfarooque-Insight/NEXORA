@@ -354,9 +354,27 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+## M4 — Planning
+
+### T-401 — Entity-to-source mapping and conformed-table resolver
+
+**Before you start:** same setup as T-302 to T-304 (token in Swagger, API running with `uvicorn app.api.main:app --reload --port 8000`, SQL consent, the real model). Open `config\roles.yaml` and put **your own UPN** in `data_engineer` (restore it afterwards). You need runs in state `DATA_PROFILED` (create, compile and Accept the contract, bind a scope, harvest, profile and Accept the inventory as in T-205 and T-304). Run A: prompt `Show net revenue by product and customer`, scope `saleslt`; its contract needs the entities Sales, Product and Customer and a Net Revenue KPI. Run B: the same, scoped to `saleslt` and `nexora_test`.
+
+1. 🌐 **Correct selection.** `POST /runs/{run_A}/plan/sources` (no body). **Expected:** HTTP 200. `entities` has Sales selected as `saleslt.SalesLT_SalesOrderDetail`, Product as `saleslt.SalesLT_Product` and Customer as `saleslt.SalesLT_Customer`; each has a `score`, `conformed: true`, `exception_id: null` and a `rationale` (for example "Glossary match 'product'; conformed; key ProductID unique"). `kpi_fields` for Net Revenue maps the line amount to `SalesLT_SalesOrderDetail.LineTotal` (`role: measure`) and the order status to a `SalesLT_SalesOrderHeader` column (`role: filter`). The file is `runs\<run_A>\SourceResolution.json`, the state is still `DATA_PROFILED`, and `GET /runs/{run_A}/artifacts` lists `SourceResolution` v1 as `draft`.
+2. 🌐 **Rejections explained.** `POST /runs/{run_B}/plan/sources` (if run B has no profile of the dupes table yet, call `POST /runs/{run_B}/profile` first with `{"tables": ["nexora_test.dim_product_dupes"]}`). **Expected:** under Product, `rejected` holds `nexora_test.dim_product_dupes` with a lower score, `requires_exception: true` and a reason such as "Not conformed and no approved exception; key ProductID not unique".
+3. 🌐 **Conformed policy.** In `config\conformed_sources.yaml` delete the line `saleslt.SalesLT_Product` (restore it afterwards) and call `POST /runs/{run_A}/plan/sources` again. **Expected:** Product has `selected: null`, a `reason` saying a data_engineer must approve an exception, and `SalesLT_Product` in `rejected` with `requires_exception: true`. An exception can only be approved while the run is `REQUIREMENT_APPROVED`: on another run, call `POST /runs/{id}/exceptions` with `{"table": "saleslt.SalesLT_Product", "rationale": "pilot"}` before accepting the inventory. Its resolution then selects the table with `conformed: false` and the exception's `exception_id`.
+4. 🌐 **Glossary without code.** In `config\glossary.yaml` remove `item` from the `product` list, create a run whose contract entity is `Items` and call `/plan/sources`. **Expected:** `Items` has `selected: null` and the reason "No table in the inventory matches 'Items'". Add `item` back and call it again. **Expected:** `Items` maps to `saleslt.SalesLT_Product` (`SourceResolution` is version 2), with no code change. Break the file (a term whose value is not a list) and call it. **Expected:** `500 CONFIG_ERROR` naming `glossary.yaml` and the line.
+5. 🌐 **Deterministic.** Call `/plan/sources` twice on the same run. **Expected:** the version stays 1 and `SourceResolution.json` is byte for byte the same (the model's first answer is kept in `runs\<run>\source_suggestions.json` and reused for an unchanged request).
+6. 💻 **Offline checks.** `python -m app.manual_tests.t401_offline_checks`. **Expected:** `All checks passed.` (glossary loading and errors, scoring and tie-breaks, selection of Sales, Product and Customer, rationale and key evidence, rejected tables with reasons, the conformed policy and approved exceptions, KPI field mapping with hallucinated tables, columns and roles discarded, a names-and-types-only model payload, an identical file on a second call, a glossary edit making a new version, and the 404/409/500/502 cases).
+7. 💻 **Clean up.** Restore `config\roles.yaml`, `config\conformed_sources.yaml` and `config\glossary.yaml` (`git checkout config/roles.yaml config/conformed_sources.yaml config/glossary.yaml`), stop the API and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–5), which need your Entra token, SQL consent, the real model and the real Lakehouse. Claude ran step 6.
+
+---
+
 ## Next tasks
 
-Sections for T-401 and later are added when each task is implemented.
+Sections for T-402 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -379,6 +397,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t302_offline_checks.py` | T-302 | Fake-SQL-endpoint checks of the data profiler and the profile endpoint |
 | `app/manual_tests/t303_offline_checks.py` | T-303 | Fake-SQL-and-LLM checks of relationship candidates, evidence, rejections and the endpoints |
 | `app/manual_tests/t304_offline_checks.py` | T-304 | Checks of Gate G2, exceptions, Accept of the inventory and data gaps |
+| `app/manual_tests/t401_offline_checks.py` | T-401 | Fake-LLM checks of the glossary, source scoring, the conformed policy and `plan/sources` |
 
 ## Adding a task
 
