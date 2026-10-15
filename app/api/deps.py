@@ -10,6 +10,7 @@ from app.api.security import user_token
 from app.auth import FABRIC_SCOPE, SQL_SCOPE, STORAGE_SCOPE
 from app.connectors.fabric_api import FabricApiClient
 from app.compiler.requirement_compiler import LlmCall, default_llm
+from app.model.dax_generator import LlmCall as DaxLlm, default_dax_llm
 from app.discovery.relationship_candidates import RelationshipLlm, default_relationship_llm
 from app.discovery.source_resolver import SourceLlm, default_source_llm
 from app.config import PROJECT_ROOT
@@ -47,6 +48,10 @@ def get_source_llm() -> SourceLlm:
 
 def get_feasibility_llm() -> SourceLlm:
     return default_source_llm()
+
+
+def get_dax_llm() -> DaxLlm:
+    return default_dax_llm()
 
 
 def get_fabric_client(

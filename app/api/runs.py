@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import (
     get_connector_factory,
+    get_dax_llm,
     get_fabric_client,
     get_feasibility_llm,
     get_llm,
@@ -33,6 +34,7 @@ from app.api.schemas import (
     HarvestResponse,
     HarvestSummary,
     KpiEditRequest,
+    MeasuresResponse,
     ModelGenerateResponse,
     KpiEditResponse,
     ProfileRequest,
@@ -75,6 +77,8 @@ from app.contracts.source_resolution import SourceResolution
 from app.contracts.bridge_proposal import BridgeProposal
 from app.workflow.bridge_stage import propose_bridges
 from app.workflow.feasibility_stage import check_feasibility
+from app.model.dax_generator import LlmCall as DaxLlm
+from app.workflow.measure_stage import add_measures
 from app.workflow.model_stage import generate_model
 from app.workflow.plan_review import check_g3, edit_plan
 from app.workflow.plan_stage import generate_plan, read_plan
@@ -453,6 +457,17 @@ def model_generate(
 ):
     version, files, run = generate_model(store, runs_root, run_id, actor=user.upn)
     return ModelGenerateResponse(version=version, files=files, run=detail(run, runs_root))
+
+
+@router.post("/{run_id}/model/measures", response_model=MeasuresResponse)
+def model_measures(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    llm: DaxLlm = Depends(get_dax_llm),
+):
+    measures, version = add_measures(store, runs_root, run_id, llm)
+    return MeasuresResponse(measures=measures, version=version)
 
 
 @router.patch("/{run_id}/plan", response_model=PlanEditResponse, response_model_by_alias=True)
