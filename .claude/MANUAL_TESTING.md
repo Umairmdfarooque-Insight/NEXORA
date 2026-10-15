@@ -73,11 +73,31 @@ Steps 1–7 and 11, 13 and 14 run offline with the file store (`RUN_STORE=file`,
 13. 💻 **Bad store name.** `$env:RUN_STORE="nope"; python -m app.cli runs list; echo $LASTEXITCODE`, then `Remove-Item Env:RUN_STORE`. **Expected:** `Invalid RUN_STORE: 'nope'. Valid values: file, fabric_sql`, exit `2`.
 14. 💻 **Clean up.** Set `RUN_STORE=file` in `.env` and delete the `runs\` folder. Optionally remove test rows with `DELETE FROM dbo.nexora_runs` in the sandbox database.
 
+### T-102 — Orchestration API skeleton
+
+Start the API in one terminal (leave it running): `uvicorn app.api.main:app --reload --port 8000`. It uses the store from `RUN_STORE` (default `file`). In a second terminal use the commands below, or the Swagger page at <http://localhost:8000/docs>. In PowerShell use `curl.exe` (plain `curl` is an alias for something else).
+
+1. 💻 **Health.** `curl.exe http://localhost:8000/health`. **Expected:** `{"status":"ok","app":"Nexora","version":"<git sha or 0.0.0>"}`.
+2. 💻 **Create.** `curl.exe -X POST http://localhost:8000/runs -H "Content-Type: application/json" -d "{\"prompt\":\"Total sales by month\"}"`. **Expected:** HTTP 201 with the full run: `"state":"CREATED"`, `"next_action":"Compile requirement"`, `"open_questions":[]`, and one history entry.
+3. 💻 **List.** `curl.exe http://localhost:8000/runs`. **Expected:** `{"items":[...],"total":N}` where each item has `run_id`, `state`, `prompt_preview`, `created_at` and `created_by`, newest first.
+4. 💻 **Read.** `curl.exe http://localhost:8000/runs/<run_id>`. **Expected:** the same run as step 2.
+5. 💻 **Artifacts.** `curl.exe http://localhost:8000/runs/<run_id>/artifacts`. **Expected:** `[]` for a new run.
+6. 💻 **Next action follows state.** `python -m app.cli runs transition <run_id> NEEDS_CLARIFICATION`, then repeat step 4. **Expected:** `"next_action":"Answer open questions"`. (With `RUN_STORE=file` the CLI and API share the same `runs\` folder.)
+7. 💻 **Validation errors.** `curl.exe -i -X POST http://localhost:8000/runs -H "Content-Type: application/json" -d "{\"prompt\":\"   \"}"`. **Expected:** HTTP 422 and `{"error":{"code":"VALIDATION_ERROR","message":"Invalid prompt: ...","details":{...}}}`. Repeat with `-d "{}"` (same result), and with `http://localhost:8000/runs?limit=201`, `?limit=0` and `?state=BOGUS` (422 each; the `state` message lists the valid states).
+8. 💻 **Unknown run.** `curl.exe -i http://localhost:8000/runs/00000000-0000-4000-8000-000000000000`. **Expected:** HTTP 404 and `"code":"RUN_NOT_FOUND"`.
+9. 💻 **No transition endpoint.** Open <http://localhost:8000/docs>. **Expected:** the page loads, and the only endpoints are `GET /health`, `POST /runs`, `GET /runs`, `GET /runs/{run_id}` and `GET /runs/{run_id}/artifacts`. Nothing changes a run's state.
+10. 💻 **CORS.** `curl.exe -i http://localhost:8000/health -H "Origin: http://localhost:3000"`. **Expected:** the response has `access-control-allow-origin: http://localhost:3000`. With `-H "Origin: http://evil.example.com"` the header is absent.
+11. 💻 **Persistence across restarts.** Stop uvicorn (Ctrl+C), start it again, and repeat step 4. **Expected:** the same run.
+12. 💻 **Unhandled error stays generic.** Covered by the offline checks (step 13); there is no safe way to trigger a 500 by hand.
+13. 💻 **Offline checks.** `python -m app.manual_tests.t102_offline_checks`. **Expected:** only `PASS` lines and `All checks passed.` (one "Unhandled error" traceback in the log is expected).
+14. 🌐 **Fabric SQL store behind the API (optional).** Stop uvicorn, set `RUN_STORE=fabric_sql` with the `FABRIC_CONTROL_DB_*` values, start it again, and repeat steps 2–4. **Expected:** the same results, and the run appears in `dbo.nexora_runs`. If the database is unreachable the API returns 502 `UPSTREAM_ERROR` with a generic message. **Restore `RUN_STORE=file` afterwards.**
+15. 💻 **Clean up.** Stop uvicorn, set `RUN_STORE=file` in `.env`, and delete the `runs\` folder.
+
 ---
 
 ## M1 onward
 
-Sections for T-102 and later are added when each task is implemented.
+Sections for T-103 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -87,6 +107,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 |---|---|---|
 | `app/manual_tests/t002_check.py` | T-002 | One sign-in for the Lakehouse and SQL connectors |
 | `app/manual_tests/t101_offline_checks.py` | T-101 | Offline checks of the state table, file store and SQL store logic |
+| `app/manual_tests/t102_offline_checks.py` | T-102 | In-process checks of the API endpoints, error envelope and CORS |
 
 ## Adding a task
 

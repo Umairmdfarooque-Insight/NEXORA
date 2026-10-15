@@ -30,7 +30,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 
 | Decision | Default used in this plan | First needed at |
 |---|---|---|
-| Backend runtime | Python FastAPI (matches the existing `app/` code) | T-102 |
+| Backend runtime | **Decided: Python FastAPI** (matches the existing `app/` code) | T-102 |
 | Orchestration | **Decided: hybrid.** An explicit state machine with `RunStore` owns run state, approvals and audit. LangGraph stage graphs run the LLM loops inside a stage. See [CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs). | T-101 (state machine), T-202 (first stage graph) |
 | Control store | **Decided: both.** Local file store under `runs/<run_id>/` is the default (`RUN_STORE=file`). A Fabric SQL Database store (`RUN_STORE=fabric_sql`, settings `FABRIC_CONTROL_DB_SERVER` and `FABRIC_CONTROL_DB_NAME`) sits behind the same `RunStore` interface. | T-101 |
 | Model authoring route | Canonical TMDL files generated deterministically; MCP optional later | T-502 |
@@ -49,7 +49,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-003 | Environment smoke-check command | M0 | Done | task/T-003-environment-smoke-check-command |
 | T-004 | Test fixtures in the sandbox Lakehouse | M0 | Done | task/T-004-test-fixtures-sandbox-lakehouse |
 | T-101 | Run model, state machine and run store | [M1 Foundation](M1-foundation.md) | Done | task/T-101-run-model-state-machine-and-run-store |
-| T-102 | Orchestration API skeleton | M1 | Not started |  |
+| T-102 | Orchestration API skeleton | M1 | Done | task/T-102-orchestration-api-skeleton |
 | T-103 | Workspace and Lakehouse selection | M1 | Not started |  |
 | T-104 | Rayfin UI shell | M1 | Not started |  |
 | T-105 | Entra authentication | M1 | Not started |  |

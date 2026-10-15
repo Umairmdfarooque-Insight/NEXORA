@@ -7,3 +7,4 @@ pyodbc
 pyyaml
 fastapi
 uvicorn
+httpx
