@@ -37,6 +37,7 @@ python -m app.tools.smoke [--only llm,lakehouse,sql] [--json]   # check LLM, Lak
 python -m app.cli runs create --prompt "..."   # also: list, show RUN_ID, transition RUN_ID STATE (exit 0/1/2)
 python -m app.cli contract validate FILE   # VALID/INVALID (exit 0/1); also: contract schema [--output FILE]
 python -m app.cli plan validate runs/RUN_ID   # check ModelSpec.yaml and ExecutionPlan.yaml: VALID/INVALID (exit 0/1/2)
+python -m app.cli deploy model TMDL_DIR --name NAME   # create or update a semantic model in the sandbox workspace (exit 0/1/2)
 uvicorn app.api.main:app --reload --port 8000   # orchestration API; Swagger at /docs
 cd rayfin-ui; npm install; npm run dev          # Rayfin UI on http://localhost:3000 (also: npm test, npm run typecheck, npm run build)
 ```
@@ -118,6 +119,10 @@ Fabric access for runs: `connectors/fabric_api.py` (`FabricApiClient`) lists wor
 - **G3.7 (an addition):** the plan's references resolve, names are unique and there are no calculated tables under Direct Lake.
 
 `PATCH /runs/{id}/plan` (`{"expected_hash": <ExecutionPlan hash>, "ops": [...]}`, any signed-in user, state `DATA_PROFILED`) applies the operations `remove_relationship {name}`, `set_storage_mode {value: DirectLake|Import}`, `override_relationship {name, rationale}` and `remove_measure {name}` in order. Any invalid one saves nothing: an unknown name is `422`, an unknown `op` is `422` listing the valid tags, a stale hash is `409 STALE_VERSION`. It writes new versions of both files (older ones stay in `plans/`), records an `EDIT` approval whose comment lists the operations, and returns `{model_spec, execution_plan, gate_result}`. Regenerating with `POST /plan` replaces edits. `POST /runs/{id}/approvals` with `artifact: "ExecutionPlan"` needs the `bi_engineer` role (`403` otherwise). `ACCEPT` needs state `DATA_PROFILED`, a current hash and a passing G3 (`409 GATE_FAILED`), marks `ExecutionPlan` and `ModelSpec` approved and moves the run to `PLAN_APPROVED`; a second one is `409 ALREADY_APPROVED`. `REJECT` needs a comment and records it; on an approved plan it also reopens it (`PLAN_APPROVED` to `DATA_PROFILED`, artifacts back to `draft`). `GET /runs/{id}/plan/sources` returns the saved `SourceResolution` (rationale and rejected tables for the screen).
+
+### Sandbox deployment client (T-501)
+
+`deploy/fabric_items.py` (`FabricItemsClient`; no API route yet, the CLI `deploy model` is the entry point) creates or updates a semantic model from a TMDL folder (`definition.pbism` plus every file under `definition/`, sent as `InlineBase64` parts). `upsert_semantic_model(workspace_id, display_name, tmdl_dir)` lists the workspace's items, matches the name ignoring case, then calls `updateDefinition` (`operation: updated`) or creates (`created`), so a repeat deployment leaves one item. A `202` is polled through `wait_for_operation` (honours `Retry-After`; `FabricTimeout` after 600 s, item state unknown). A failed operation or a `400` is a `FabricOperationFailed` carrying Fabric's error unchanged in `details` plus the request ID; `429` is retried 5 times. A same-named item of another type is `NameConflict` (`409 NAME_CONFLICT`). The target guard lives inside the client: any workspace other than `SANDBOX_WORKSPACE_ID` (falling back to `FABRIC_SANDBOX_WORKSPACE_ID`) is `TargetNotAllowed` (`403 TARGET_NOT_ALLOWED`), and no setting at all is `CONFIG_ERROR`. Only the promotion service (T-702) may build the client with `allow_any_workspace=True`. The token comes from a `token_provider` (default `get_token(FABRIC_SCOPE)`, the CLI's sign-in; the API will pass the user's OBO token).
 
 ## Architecture
 

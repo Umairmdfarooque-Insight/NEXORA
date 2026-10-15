@@ -438,9 +438,46 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+## M5 — Semantic model
+
+### T-501 — Sandbox deployment client
+
+**Before you start:** put the sandbox workspace's ID in `SANDBOX_WORKSPACE_ID` in `.env` (a workspace you may write to, never a production one). Create this folder, indenting with tabs:
+
+```
+tmp\Nexora_Smoke\definition.pbism                  {"version": "4.0", "settings": {}}
+tmp\Nexora_Smoke\definition\database.tmdl          database Nexora_Smoke
+                                                   	compatibilityLevel: 1604
+tmp\Nexora_Smoke\definition\model.tmdl             model Model
+                                                   	culture: en-US
+                                                   ref table Product
+tmp\Nexora_Smoke\definition\tables\Product.tmdl    table Product
+                                                   	column ProductID
+                                                   		dataType: int64
+                                                   		sourceColumn: ProductID
+                                                   		summarizeBy: none
+                                                   	measure 'Product Count' = COUNTROWS('Product')
+                                                   	partition Product = m
+                                                   		mode: import
+                                                   		source = let Source = #table({"ProductID"}, {{1}, {2}}) in Source
+```
+
+The table holds two literal rows, so no Lakehouse connection is needed. If Fabric rejects the files, adjust them to Microsoft's current TMDL documentation. The error you see is also what step 4 tests.
+
+1. 🌐 **Create.** `python -m app.cli deploy model tmp\Nexora_Smoke --name Nexora_Smoke`. **Expected:** `item_id: <guid>` and `operation: created`, exit code 0. The model `Nexora_Smoke` appears in the sandbox workspace and opens in the web model view.
+2. 🌐 **Update, not duplicate.** Rename the measure in `Product.tmdl` (for example to `Products`) and run the same command again. **Expected:** the same `item_id` and `operation: updated`. The workspace still has exactly one `Nexora_Smoke`, showing the new measure name.
+3. 🌐 **Guard.** `python -m app.cli deploy model tmp\Nexora_Smoke --name Nexora_Smoke --workspace-id 99999999-9999-4999-8999-999999999999; echo $LASTEXITCODE`. **Expected:** `TARGET_NOT_ALLOWED: Deployment is only allowed to the configured sandbox workspace`, exit code 1, and nothing created anywhere (no Fabric call is made).
+4. 🌐 **Failure surfaced.** Put a syntax error in `Product.tmdl` (for example delete the `=` of the measure) and deploy. **Expected:** `UPSTREAM_ERROR: ...` with Fabric's message, `Fabric request ID: <id>` and Fabric's error JSON, exit code 1. Fix the file afterwards.
+5. 💻 **Offline checks.** `python -m app.manual_tests.t501_offline_checks`. **Expected:** `All checks passed.` (the definition parts, create, update without a duplicate, polling with `Retry-After`, a failed operation, a rejected definition, `429` retries, a name used by another type, the timeout, the target guard, the setting fallback and the CLI).
+6. 💻 **Clean up.** Delete `Nexora_Smoke` from the sandbox workspace and the `tmp\Nexora_Smoke` folder.
+
+**Not run by Claude:** the live steps (1–4), which need your sign-in and the sandbox workspace. Claude ran step 5.
+
+---
+
 ## Next tasks
 
-Sections for T-501 and later are added when each task is implemented.
+Sections for T-502 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -468,6 +505,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t403_offline_checks.py` | T-403 | Fake-SQL checks of bridge detection, mapping-table evidence, derivation rules, approvals and `plan/bridges` |
 | `app/manual_tests/t404_offline_checks.py` | T-404 | Checks of ModelSpec and ExecutionPlan generation, plan validation, the `plan` endpoints and `cli plan validate` |
 | `app/manual_tests/t405_offline_checks.py` | T-405 | Checks of Gate G3, plan edits, Accept and Reject of the ExecutionPlan |
+| `app/manual_tests/t501_offline_checks.py` | T-501 | Fake-Fabric checks of the deployment client, the sandbox guard and `cli deploy model` |
 
 ## Adding a task
 
