@@ -46,6 +46,15 @@ export interface RunDetail {
   warnings: string[];
   artifacts: Record<string, ArtifactRef>;
   contract: Contract | null;
+  data_gaps: DataGap[];
+}
+
+export interface DataGap {
+  gap_id: string;
+  description: string;
+  raised_by: string;
+  at: string;
+  from_state: string;
 }
 
 export interface ArtifactRef {
@@ -157,7 +166,7 @@ export interface Explanation {
 }
 
 export interface ApprovalBody {
-  artifact: "BusinessContract";
+  artifact: "BusinessContract" | "MetadataInventory";
   action: ApprovalAction;
   expected_hash: string;
   comment?: string;
@@ -226,6 +235,95 @@ export interface CreateRunBody {
   subject_area?: string;
   desired_outputs: string[];
   constraints: string[];
+}
+
+export interface InventoryColumn {
+  name: string;
+  data_type: string | null;
+  nullable: boolean | null;
+  description: string | null;
+}
+
+export interface ColumnProfile {
+  null_count: number | null;
+  distinct_count: number | null;
+  is_key_candidate: boolean;
+  is_unique: boolean | null;
+  duplicate_count: number | null;
+  min: string | number | null;
+  max: string | number | null;
+  approximate: boolean;
+  note: string | null;
+}
+
+export interface TableProfile {
+  status: "ok" | "warning" | "error";
+  code: string | null;
+  message: string | null;
+  row_count: number | null;
+  columns: Record<string, ColumnProfile>;
+  freshness: {
+    column: string | null;
+    max_value: string | null;
+    age_days: number | null;
+    status: "ok" | "unknown";
+  } | null;
+  warnings: string[];
+  evidence: { queries: string[]; profiled_at: string };
+}
+
+export interface InventoryTable {
+  schema: string;
+  table_name: string;
+  description: string | null;
+  columns: InventoryColumn[];
+  profile: TableProfile | null;
+  errors: { code: string; message: string }[];
+}
+
+export interface RelationshipEvidence {
+  id: string;
+  from: { table: string; column: string };
+  to: { table: string; column: string };
+  source: "heuristic" | "llm" | "user";
+  type_compatible: boolean | null;
+  overlap_pct: number | null;
+  orphan_rate: number | null;
+  null_rate: number | null;
+  cardinality: "one_to_one" | "many_to_one" | "many_to_many" | null;
+  confidence: "high" | "medium" | "low" | null;
+  evidence: { queries: string[]; computed_at: string };
+  status: "candidate" | "rejected";
+  rejected_reason: string | null;
+  notes: string[];
+}
+
+export interface MetadataInventory {
+  run_id: string;
+  version: number;
+  harvested_at: string;
+  scope: { workspace_id: string; lakehouse_id: string; schemas: string[] };
+  tables: InventoryTable[];
+  relationship_evidence: RelationshipEvidence[];
+  errors: { table: string; code: string; message: string }[];
+  warnings: string[];
+}
+
+export interface HarvestResult {
+  summary: { tables: number; columns: number; errors: number };
+  artifact: { name: string; version: number; hash: string; status: string };
+  warnings: string[];
+}
+
+export interface StageCounts {
+  [key: string]: number | string[];
+}
+
+export interface ExceptionResult {
+  exception_id: string;
+  table: string;
+  approved_by: string;
+  at: string;
 }
 
 export interface ScopeBody {

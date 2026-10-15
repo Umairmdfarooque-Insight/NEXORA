@@ -7,10 +7,14 @@ import type {
   ApprovalResult,
   CompileResult,
   CreateRunBody,
+  ExceptionResult,
   GateResult,
+  HarvestResult,
   Lakehouse,
   Me,
+  MetadataInventory,
   QuestionResult,
+  StageCounts,
   RunDetail,
   RunList,
   ScopeBody,
@@ -166,6 +170,33 @@ export const api = {
   checkG1: (id: string) =>
     apiFetch<GateResult>(`/runs/${encodeURIComponent(id)}/gates/G1/check`, {
       method: "POST",
+    }),
+  checkG2: (id: string) =>
+    apiFetch<GateResult>(`/runs/${encodeURIComponent(id)}/gates/G2/check`, {
+      method: "POST",
+    }),
+  getInventory: (id: string) =>
+    apiFetch<MetadataInventory>(`/runs/${encodeURIComponent(id)}/inventory`),
+  harvest: (id: string, schemas?: string[]) =>
+    apiFetch<HarvestResult>(`/runs/${encodeURIComponent(id)}/harvest`, {
+      method: "POST",
+      body: JSON.stringify(schemas && schemas.length > 0 ? { schemas } : {}),
+    }),
+  profile: (id: string) =>
+    apiFetch<StageCounts>(`/runs/${encodeURIComponent(id)}/profile`, { method: "POST" }),
+  analyzeRelationships: (id: string) =>
+    apiFetch<StageCounts>(`/runs/${encodeURIComponent(id)}/relationships/analyze`, {
+      method: "POST",
+    }),
+  approveException: (id: string, table: string, rationale: string) =>
+    apiFetch<ExceptionResult>(`/runs/${encodeURIComponent(id)}/exceptions`, {
+      method: "POST",
+      body: JSON.stringify({ table, rationale }),
+    }),
+  raiseDataGap: (id: string, description: string) =>
+    apiFetch<RunDetail>(`/runs/${encodeURIComponent(id)}/data-gaps`, {
+      method: "POST",
+      body: JSON.stringify({ description }),
     }),
   approve: (id: string, body: ApprovalBody) =>
     apiFetch<ApprovalResult>(`/runs/${encodeURIComponent(id)}/approvals`, {

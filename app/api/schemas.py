@@ -8,6 +8,7 @@ from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_
 from app.contracts.business_contract import BusinessContract, ExpectedExample
 from app.workflow.approval import Action, ApprovalRecord
 from app.workflow.gates import GateResult
+from app.workflow.inventory_review import DataGap
 from app.workflow.next_action import next_action
 from app.workflow.run import MAX_PROMPT_LENGTH, Run
 from app.workflow.states import RunState
@@ -64,6 +65,7 @@ class RunDetail(Run):
     next_action: str
     open_questions: list[dict[str, Any]] = Field(default_factory=list)  # open questions of the current contract
     contract: BusinessContract | None = None  # the run's current contract (T-205)
+    data_gaps: list[DataGap] = Field(default_factory=list)  # raised in the data stage (T-304)
     warnings: list[str] = Field(default_factory=list)
 
     @classmethod
@@ -73,6 +75,7 @@ class RunDetail(Run):
         warnings: list[str] | None = None,
         open_questions: list[dict[str, Any]] | None = None,
         contract: BusinessContract | None = None,
+        data_gaps: list[DataGap] | None = None,
     ) -> "RunDetail":
         return cls(
             **run.model_dump(),
@@ -80,6 +83,7 @@ class RunDetail(Run):
             open_questions=open_questions or [],
             warnings=warnings or [],
             contract=contract,
+            data_gaps=data_gaps or [],
         )
 
 
@@ -249,6 +253,22 @@ class AnalyzeRelationshipsResponse(BaseModel):
     low: int
     rejected: int
     warnings: list[str] = Field(default_factory=list)
+
+
+class ExceptionRequest(BaseModel):
+    table: Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[^.]+\.[^.]+$")]
+    rationale: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
+class ExceptionResponse(BaseModel):
+    exception_id: str
+    table: str
+    approved_by: str
+    at: str
+
+
+class DataGapRequest(BaseModel):
+    description: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
 class Health(BaseModel):

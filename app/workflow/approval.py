@@ -73,9 +73,9 @@ class Outcome:
 
 
 class Forbidden(Exception):
-    def __init__(self, role: str, action: Action):
+    def __init__(self, role: str, action: Action, message: str | None = None):
         self.role = role
-        super().__init__(f"Only a {role} can {action.value.lower()} the contract")
+        super().__init__(message or f"Only a {role} can {action.value.lower()} the contract")
 
 
 class GateFailed(Exception):
@@ -94,6 +94,12 @@ class UnknownArtifact(Exception):
     def __init__(self, artifact: str):
         self.artifact = artifact
         super().__init__(f"Approvals are not supported for artifact {artifact!r}")
+
+
+class UnsupportedAction(Exception):
+    def __init__(self, artifact: str, action: Action):
+        self.artifact = artifact
+        super().__init__(f"{action.value} is not available for {artifact}")
 
 
 def _approvals_path(runs_root: Path, run_id: str) -> Path:
@@ -190,6 +196,12 @@ def perform(
     """Carry out one approval action. `user` is {oid, upn}. Raises Forbidden, GateFailed,
     AlreadyApproved, ContractLocked, WrongState, StaleVersion, NotFound or UnknownArtifact;
     on any of them nothing is changed and nothing is recorded."""
+    if artifact == "MetadataInventory":
+        from app.workflow.inventory_review import accept_inventory  # avoids a circular import
+
+        if action is not Action.ACCEPT:
+            raise UnsupportedAction(artifact, action)
+        return accept_inventory(store, runs_root, run_id, user, expected_hash, comment)
     if artifact != ARTIFACT:
         raise UnknownArtifact(artifact)
     run = store.get(run_id)

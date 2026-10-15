@@ -9,6 +9,7 @@ import {
   makeStyles,
   MessageBar,
   MessageBarBody,
+  MessageBarTitle,
   Spinner,
   Subtitle2,
   Title2,
@@ -159,6 +160,26 @@ export default function RunDetailPage() {
           </section>
 
           <ClarificationPanel run={run} onRun={setRun} />
+
+          {(run.artifacts.MetadataInventory ||
+            run.state === "REQUIREMENT_APPROVED" ||
+            run.data_gaps.length > 0) && (
+            <section className={styles.card} aria-label="Data">
+              <Subtitle2>Data</Subtitle2>
+              <Body1>
+                <Link href={`/runs/${encodeURIComponent(run.run_id)}/inventory`}>Open the inventory</Link>{" "}
+                to harvest, profile and review the Lakehouse metadata.
+              </Body1>
+              {run.data_gaps.map((gap) => (
+                <MessageBar key={gap.gap_id} intent="warning">
+                  <MessageBarBody>
+                    <MessageBarTitle>Data gap</MessageBarTitle>
+                    {gap.description} ({gap.raised_by}, {formatDateTime(gap.at)})
+                  </MessageBarBody>
+                </MessageBar>
+              ))}
+            </section>
+          )}
 
           <div className={styles.columns}>
             <div className={styles.stack}>
