@@ -45,6 +45,8 @@ from app.workflow.clarification import ContractLocked, NotFound, QuestionConflic
 from app.workflow.compile_stage import WrongState
 from app.workflow.harvest_stage import ScopeMissing
 from app.workflow.inventory_review import NotACandidate
+from app.model.tmdl_generator import ModelGenerationError
+from app.workflow.model_stage import ModelSpecInvalid
 from app.workflow.plan_review import PlanEditInvalid
 from app.workflow.scope import SchemaNotFound, ScopeLocked
 
@@ -190,6 +192,19 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(PlanEditInvalid)
     async def plan_edit_invalid(request: Request, exc: PlanEditInvalid):
+        return error_response(422, "VALIDATION_ERROR", str(exc))
+
+    @app.exception_handler(ModelSpecInvalid)
+    async def model_spec_invalid(request: Request, exc: ModelSpecInvalid):
+        return error_response(
+            422,
+            "VALIDATION_ERROR",
+            str(exc),
+            {"failed_checks": [c.model_dump(mode="json") for c in exc.failed]},
+        )
+
+    @app.exception_handler(ModelGenerationError)
+    async def model_generation_error(request: Request, exc: ModelGenerationError):
         return error_response(422, "VALIDATION_ERROR", str(exc))
 
     @app.exception_handler(NoFeasibleKpis)

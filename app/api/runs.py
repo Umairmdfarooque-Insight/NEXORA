@@ -33,6 +33,7 @@ from app.api.schemas import (
     HarvestResponse,
     HarvestSummary,
     KpiEditRequest,
+    ModelGenerateResponse,
     KpiEditResponse,
     ProfileRequest,
     PlanEditRequest,
@@ -74,6 +75,7 @@ from app.contracts.source_resolution import SourceResolution
 from app.contracts.bridge_proposal import BridgeProposal
 from app.workflow.bridge_stage import propose_bridges
 from app.workflow.feasibility_stage import check_feasibility
+from app.workflow.model_stage import generate_model
 from app.workflow.plan_review import check_g3, edit_plan
 from app.workflow.plan_stage import generate_plan, read_plan
 from app.workflow.source_stage import load_saved_resolution
@@ -440,6 +442,17 @@ def get_plan(
 ):
     execution_plan, model_spec, validation = read_plan(store, runs_root, run_id)
     return PlanResponse(execution_plan=execution_plan, model_spec=model_spec, validation=validation)
+
+
+@router.post("/{run_id}/model/generate", response_model=ModelGenerateResponse)
+def model_generate(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    user: Principal = Depends(current_user),
+):
+    version, files, run = generate_model(store, runs_root, run_id, actor=user.upn)
+    return ModelGenerateResponse(version=version, files=files, run=detail(run, runs_root))
 
 
 @router.patch("/{run_id}/plan", response_model=PlanEditResponse, response_model_by_alias=True)
