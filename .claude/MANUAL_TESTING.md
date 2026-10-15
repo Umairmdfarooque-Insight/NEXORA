@@ -282,9 +282,28 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+## M3 — Data understanding
+
+### T-301 — Metadata Harvester per run
+
+**Before you start:** same setup as T-204 and T-205 (token in Swagger, API running with `uvicorn app.api.main:app --port 8000`, your UPN in `business_owner` of `config\roles.yaml`; restore it afterwards). You need two runs that are `REQUIREMENT_APPROVED` (create, compile, answer and Accept as in T-204/T-205). Bind run A: `PUT /runs/{run_id}/scope` with your workspace and Lakehouse ids and `{"schemas": ["saleslt"]}`. Bind run B the same way with `"schemas": []`.
+
+1. 🌐 **Harvest.** `POST /runs/{run_A}/harvest` (no body). **Expected:** HTTP 200 with `summary` (`tables`, `columns`, `errors`) and `artifact` (`name: MetadataInventory`, `version: 1`, a `sha256:` hash). `runs\<run_A>\MetadataInventory.json` lists every `saleslt` table, the `summary` counts equal the table, column and error totals in the file, and `GET /runs/{run_A}/inventory` returns the same content. The run state is still `REQUIREMENT_APPROVED`.
+2. 🌐 **Matches the portal.** Pick three tables from the file and compare their columns, types and nullability with the Lakehouse explorer in Fabric. **Expected:** identical.
+3. 🌐 **Not hardcoded.** `POST /runs/{run_B}/harvest` with `{"schemas": ["nexora_test"]}`. **Expected:** the five fixture tables from T-004, and `scope.schemas` in the file is `["nexora_test"]`. Run B's own scope is not changed.
+4. 🌐 **Wrong state.** Create a run (state `CREATED`), bind a scope and `POST /runs/{id}/harvest`. **Expected:** HTTP 409, code `WRONG_STATE`. Also try `{"schemas": ["no_such_schema"]}` on run A. **Expected:** HTTP 404, code `SCHEMA_NOT_FOUND`, and the inventory file is unchanged.
+5. 🌐 **Versioning.** `POST /runs/{run_A}/harvest` again. **Expected:** the response `artifact.version` and the file's `version` are `2`, `GET /runs/{run_A}/artifacts` shows `MetadataInventory` at version 2 with a new hash, and `runs\<run_A>\inventories\` holds `MetadataInventory.v1.json` and `.v2.json`.
+6. 🌐 **Scope lock.** `PUT /runs/{run_A}/scope` after the harvest. **Expected:** HTTP 409, code `SCOPE_LOCKED`.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t301_offline_checks`. **Expected:** `All checks passed.` (fake Lakehouse: table paging, per-table errors, `NO_COLUMNS`, Unicode names, 520 tables with progress logs, versioning, schema override, wrong state, missing scope, re-harvest from `DATA_PROFILED`, 0 tables warning, listing failures).
+8. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–6), which need your Entra token and the real Lakehouse. Claude ran step 7.
+
+---
+
 ## Next tasks
 
-Sections for T-301 and later are added when each task is implemented.
+Sections for T-302 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -303,6 +322,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t203_offline_checks.py` | T-203 | Fake-LLM checks of answering, dismissing, locked facts and KPI edits |
 | `app/manual_tests/t204_offline_checks.py` | T-204 | Fake-LLM checks of Gate G1, the approval actions, locking, roles and the approvals log |
 | `app/manual_tests/t205_offline_checks.py` | T-205 | Checks of `contract` and `artifacts` in the run detail and `GET /me` |
+| `app/manual_tests/t301_offline_checks.py` | T-301 | Fake-Lakehouse checks of the harvester, versioning and the harvest/inventory endpoints |
 
 ## Adding a task
 

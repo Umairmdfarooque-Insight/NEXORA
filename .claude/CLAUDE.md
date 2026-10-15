@@ -74,6 +74,10 @@ Fabric access for runs: `connectors/fabric_api.py` (`FabricApiClient`) lists wor
 
 `RunDetail` (from `GET /runs/{id}` and every action that returns a run) carries `contract` (the current `BusinessContract`, or `null`) and `artifacts`, so the UI needs no separate contract call. `GET /me` (`api/me.py`) returns `{oid, upn, name, roles}` from `config/roles.yaml`.
 
+### Metadata Harvester (T-301)
+
+`POST /runs/{id}/harvest` (`workflow/harvest_stage.py`, `harvest_run`; a plain function, no graph) reads the run's scope through the OneLake table API (`discovery/harvester.py`, no LLM) and writes `runs/<id>/MetadataInventory.json` plus `inventories/MetadataInventory.v<n>.json` (models in `contracts/metadata_inventory.py`). Allowed in `REQUIREMENT_APPROVED` and in `DATA_PROFILED` (a re-harvest, which moves the run back to `REQUIREMENT_APPROVED`); `409 WRONG_STATE` otherwise, `400 BAD_REQUEST` if the run has no scope. The body's `schemas` overrides `scope.schemas` for that harvest only (empty scope and no body means all schemas; an unknown one is `404 SCHEMA_NOT_FOUND` and nothing is written). A table that fails is recorded in the inventory's `errors[]` (`FORBIDDEN`, `NOT_FOUND`, `RATE_LIMITED`, `UPSTREAM_TIMEOUT`, `UPSTREAM_ERROR`, `NO_COLUMNS`) and the rest are still harvested. A new version resets `profile` and `relationship_evidence`. The inventory also has a `warnings` list (for example 0 tables). `GET /runs/{id}/inventory` returns the current file (`404 NOT_FOUND` before the first harvest). `FabricLakehouseConnector.list_tables` follows `next_page_token`.
+
 ## Architecture
 
 A staged discovery pipeline. There is no orchestrator or entry point yet; the `test_*.py` scripts wire the stages together by hand. Data flows between stages as plain dicts or the `RequirementSpec` pydantic model:

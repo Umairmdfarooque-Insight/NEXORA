@@ -19,6 +19,9 @@ from app.api.schemas import (
     CompileResponse,
     CreateRunRequest,
     DismissRequest,
+    HarvestRequest,
+    HarvestResponse,
+    HarvestSummary,
     KpiEditRequest,
     KpiEditResponse,
     QuestionResponse,
@@ -38,7 +41,9 @@ from app.workflow.clarification import (
     edit_kpi,
 )
 from app.workflow.compile_stage import compile_run, current_contract, open_questions
+from app.contracts.metadata_inventory import MetadataInventory
 from app.workflow.gates import GateResult
+from app.workflow.harvest_stage import ARTIFACT as INVENTORY, harvest_run, load_inventory, summary
 from app.workflow.scope import bind_scope
 from app.workflow.states import RunState
 
@@ -232,6 +237,48 @@ def set_scope(
         body.schemas,
     )
     return detail(run, runs_root, warnings)
+
+
+@router.post("/{run_id}/harvest", response_model=HarvestResponse)
+def harvest(
+    run_id: str,
+    body: HarvestRequest | None = None,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    connector_for_scope=Depends(get_connector_factory),
+    user: Principal = Depends(current_user),
+):
+    run, inventory = harvest_run(
+        store,
+        runs_root,
+        run_id,
+        connector_for_scope,
+        schemas=body.schemas if body else None,
+        actor=user.upn,
+    )
+    ref = run.artifacts[INVENTORY]
+    return HarvestResponse(
+        summary=HarvestSummary(**summary(inventory)),
+        artifact=ArtifactItem(
+            name=INVENTORY,
+            version=ref.version,
+            path=ref.path,
+            hash=ref.hash,
+            status=ref.status,
+            updated_at=ref.updated_at,
+        ),
+        warnings=inventory.warnings,
+    )
+
+
+@router.get("/{run_id}/inventory", response_model=MetadataInventory, response_model_by_alias=True)
+def get_inventory(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    store.get(run_id)
+    return load_inventory(runs_root, run_id)
 
 
 @router.get("/{run_id}/artifacts", response_model=list[ArtifactItem])
