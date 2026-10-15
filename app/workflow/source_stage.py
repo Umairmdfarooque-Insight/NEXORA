@@ -39,6 +39,14 @@ SOURCE_STATES = (RunState.DATA_PROFILED,)
 
 
 
+def load_saved_resolution(runs_root: Path, run_id: str) -> SourceResolution:
+    """The saved SourceResolution.json (404 NOT_FOUND before /plan/sources)."""
+    path = Path(runs_root) / run_id / CURRENT
+    if not path.is_file():
+        raise NotFound("Sources haven't been resolved for this run yet: POST /runs/{id}/plan/sources first")
+    return SourceResolution.model_validate_json(path.read_text(encoding="utf-8"))
+
+
 def resolve_sources(store: RunStore, runs_root: Path, run_id: str, llm: SourceLlm) -> SourceResolution:
     """Resolve the run's entities and KPI needs to tables and columns."""
     run = store.get(run_id)

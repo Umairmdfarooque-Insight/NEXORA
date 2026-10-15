@@ -44,6 +44,7 @@ from app.workflow.clarification import ContractLocked, NotFound, QuestionConflic
 from app.workflow.compile_stage import WrongState
 from app.workflow.harvest_stage import ScopeMissing
 from app.workflow.inventory_review import NotACandidate
+from app.workflow.plan_review import PlanEditInvalid
 from app.workflow.scope import SchemaNotFound, ScopeLocked
 
 logger = logging.getLogger(__name__)
@@ -185,6 +186,10 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"expected_hash": exc.expected, "current_hash": exc.current},
         )
+
+    @app.exception_handler(PlanEditInvalid)
+    async def plan_edit_invalid(request: Request, exc: PlanEditInvalid):
+        return error_response(422, "VALIDATION_ERROR", str(exc))
 
     @app.exception_handler(NoFeasibleKpis)
     async def no_feasible_kpis(request: Request, exc: NoFeasibleKpis):

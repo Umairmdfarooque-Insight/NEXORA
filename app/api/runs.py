@@ -35,6 +35,8 @@ from app.api.schemas import (
     KpiEditRequest,
     KpiEditResponse,
     ProfileRequest,
+    PlanEditRequest,
+    PlanEditResponse,
     PlanResponse,
     ProfileResponse,
     QuestionResponse,
@@ -72,7 +74,9 @@ from app.contracts.source_resolution import SourceResolution
 from app.contracts.bridge_proposal import BridgeProposal
 from app.workflow.bridge_stage import propose_bridges
 from app.workflow.feasibility_stage import check_feasibility
+from app.workflow.plan_review import check_g3, edit_plan
 from app.workflow.plan_stage import generate_plan, read_plan
+from app.workflow.source_stage import load_saved_resolution
 from app.workflow.scope import bind_scope
 from app.workflow.source_stage import resolve_sources
 from app.workflow.states import RunState
@@ -210,7 +214,9 @@ def check_gate(
         return check_g1(store, runs_root, run_id)
     if gate == "G2":
         return check_g2(store, runs_root, run_id)
-    raise NotFound(f"No gate {gate!r}; only G1 and G2 are available")
+    if gate == "G3":
+        return check_g3(store, runs_root, run_id)
+    raise NotFound(f"No gate {gate!r}; only G1, G2 and G3 are available")
 
 
 @router.post("/{run_id}/approvals", response_model=ApprovalResponse)
@@ -434,6 +440,30 @@ def get_plan(
 ):
     execution_plan, model_spec, validation = read_plan(store, runs_root, run_id)
     return PlanResponse(execution_plan=execution_plan, model_spec=model_spec, validation=validation)
+
+
+@router.patch("/{run_id}/plan", response_model=PlanEditResponse, response_model_by_alias=True)
+def patch_plan(
+    run_id: str,
+    body: PlanEditRequest,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    user: Principal = Depends(current_user),
+):
+    model_spec, execution_plan, gate_result = edit_plan(
+        store, runs_root, run_id, body.expected_hash, body.ops, {"oid": user.oid, "upn": user.upn}
+    )
+    return PlanEditResponse(model_spec=model_spec, execution_plan=execution_plan, gate_result=gate_result)
+
+
+@router.get("/{run_id}/plan/sources", response_model=SourceResolution)
+def get_plan_sources(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    store.get(run_id)
+    return load_saved_resolution(runs_root, run_id)
 
 
 @router.get("/{run_id}/inventory", response_model=MetadataInventory, response_model_by_alias=True)

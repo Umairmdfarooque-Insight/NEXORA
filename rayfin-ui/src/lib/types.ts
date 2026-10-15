@@ -166,7 +166,7 @@ export interface Explanation {
 }
 
 export interface ApprovalBody {
-  artifact: "BusinessContract" | "MetadataInventory";
+  artifact: "BusinessContract" | "MetadataInventory" | "ExecutionPlan";
   action: ApprovalAction;
   expected_hash: string;
   comment?: string;
@@ -329,4 +329,117 @@ export interface ExceptionResult {
 export interface ScopeBody {
   workspace_id: string;
   lakehouse_id: string;
+}
+
+// --- Plan (T-404, T-405) ---
+
+export interface ModelColumn {
+  name: string;
+  source_column: string;
+  data_type: string;
+  format_string: string | null;
+  display_folder: string | null;
+  is_hidden: boolean;
+}
+
+export interface ModelTable {
+  name: string;
+  source: { schema: string; table: string } | null;
+  role: "fact" | "dimension" | "bridge" | "date";
+  grain: string | null;
+  columns: ModelColumn[];
+  hierarchies: { name: string; levels: { name: string; column: string }[] }[];
+}
+
+export interface ModelRelationship {
+  name: string;
+  from: { table: string; column: string };
+  to: { table: string; column: string };
+  cardinality: "many_to_one" | "one_to_one" | "many_to_many";
+  cross_filter: "single" | "both";
+  evidence_ref: string | null;
+  override_rationale: string | null;
+}
+
+export interface ModelMeasure {
+  name: string;
+  table: string;
+  kpi: string;
+  formula_intent: string | null;
+  dax: string | null;
+  format_string: string | null;
+  display_folder: string | null;
+  description: string | null;
+}
+
+export interface ModelSpec {
+  run_id: string;
+  version: number;
+  model_name: string;
+  storage_mode: "DirectLake" | "Import";
+  tables: ModelTable[];
+  relationships: ModelRelationship[];
+  measures: ModelMeasure[];
+  roles: { name: string; description: string; applies_to: string[]; table_filters: Record<string, string>[] }[];
+}
+
+export interface DataEngineeringAction {
+  id: string;
+  kind: "create_date_table" | "create_bridge_table";
+  description: string;
+  blocking: boolean;
+  owner: string | null;
+  status: "open" | "done";
+}
+
+export interface ExecutionPlan {
+  run_id: string;
+  version: number;
+  sources: { table: string; role: string; conformed: boolean; exception_id: string | null }[];
+  stages: { name: string; gate: string; depends_on: string[] }[];
+  target: { workspace_id: string | null; kind: string };
+  approvals_required: { gate: string; roles: string[] }[];
+  bridges: string[];
+  data_engineering_actions: DataEngineeringAction[];
+  feasibility_ref: string;
+}
+
+export interface PlanResult {
+  execution_plan: ExecutionPlan;
+  model_spec: ModelSpec;
+  validation: GateResult;
+}
+
+export interface PlanEditResult {
+  execution_plan: ExecutionPlan;
+  model_spec: ModelSpec;
+  gate_result: GateResult;
+}
+
+export type PlanOp =
+  | { op: "remove_relationship"; name: string }
+  | { op: "set_storage_mode"; value: "DirectLake" | "Import" }
+  | { op: "override_relationship"; name: string; rationale: string }
+  | { op: "remove_measure"; name: string };
+
+export interface SourceResolution {
+  run_id: string;
+  version: number;
+  entities: {
+    entity: string;
+    selected: {
+      table: string;
+      score: number;
+      conformed: boolean;
+      exception_id: string | null;
+      rationale: string;
+    } | null;
+    reason: string | null;
+    rejected: { table: string; score: number; reason: string; requires_exception: boolean }[];
+  }[];
+  kpi_fields: {
+    kpi: string;
+    fields: { need: string; table: string; column: string; role: string }[];
+    unmapped: { need: string; role: string; reason: string }[];
+  }[];
 }

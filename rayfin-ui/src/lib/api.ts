@@ -13,11 +13,15 @@ import type {
   Lakehouse,
   Me,
   MetadataInventory,
+  PlanEditResult,
+  PlanOp,
+  PlanResult,
   QuestionResult,
   StageCounts,
   RunDetail,
   RunList,
   ScopeBody,
+  SourceResolution,
   Workspace,
 } from "./types.ts";
 
@@ -205,6 +209,27 @@ export const api = {
     }),
   listApprovals: (id: string) =>
     apiFetch<ApprovalRecord[]>(`/runs/${encodeURIComponent(id)}/approvals`),
+  checkG3: (id: string) =>
+    apiFetch<GateResult>(`/runs/${encodeURIComponent(id)}/gates/G3/check`, {
+      method: "POST",
+    }),
+  getPlan: (id: string) => apiFetch<PlanResult>(`/runs/${encodeURIComponent(id)}/plan`),
+  generatePlan: (id: string) =>
+    apiFetch<PlanResult>(`/runs/${encodeURIComponent(id)}/plan`, { method: "POST" }),
+  editPlan: (id: string, expectedHash: string, ops: PlanOp[]) =>
+    apiFetch<PlanEditResult>(`/runs/${encodeURIComponent(id)}/plan`, {
+      method: "PATCH",
+      body: JSON.stringify({ expected_hash: expectedHash, ops }),
+    }),
+  getSourceResolution: (id: string) =>
+    apiFetch<SourceResolution>(`/runs/${encodeURIComponent(id)}/plan/sources`),
+  resolveSources: (id: string) =>
+    apiFetch<SourceResolution>(`/runs/${encodeURIComponent(id)}/plan/sources`, { method: "POST" }),
+  checkFeasibility: (id: string) =>
+    apiFetch<{ kpis: { kpi: string; status: string }[]; run: RunDetail }>(
+      `/runs/${encodeURIComponent(id)}/plan/feasibility`,
+      { method: "POST" },
+    ),
   listWorkspaces: () => apiFetch<Workspace[]>("/fabric/workspaces"),
   listLakehouses: (workspaceId: string) =>
     apiFetch<Lakehouse[]>(

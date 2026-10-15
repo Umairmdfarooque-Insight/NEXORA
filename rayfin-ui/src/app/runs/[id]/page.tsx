@@ -181,6 +181,16 @@ export default function RunDetailPage() {
             </section>
           )}
 
+          {(run.artifacts.ExecutionPlan || run.state === "DATA_PROFILED" || run.state === "PLAN_APPROVED") && (
+            <section className={styles.card} aria-label="Plan">
+              <Subtitle2>Plan</Subtitle2>
+              <Body1>
+                <Link href={`/runs/${encodeURIComponent(run.run_id)}/plan`}>Open the plan review</Link> to see why each
+                table was chosen, the relationships and their evidence, and to approve the plan.
+              </Body1>
+            </section>
+          )}
+
           <div className={styles.columns}>
             <div className={styles.stack}>
               <section className={styles.card} aria-label="Prompt">
