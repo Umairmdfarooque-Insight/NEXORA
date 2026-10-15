@@ -49,6 +49,11 @@ def _build_parser() -> argparse.ArgumentParser:
     validate.add_argument("file")
     schema = contract_cmds.add_parser("schema", help="Print the BusinessContract JSON Schema")
     schema.add_argument("--output", help="Write the schema to this file (UTF-8, LF) instead of printing")
+
+    plan = groups.add_parser("plan", help="Validate a run's ModelSpec.yaml and ExecutionPlan.yaml")
+    plan_cmds = plan.add_subparsers(dest="command", required=True)
+    plan_validate = plan_cmds.add_parser("validate", help="Check the plan files in a run folder (runs/<run_id>)")
+    plan_validate.add_argument("path")
     return parser
 
 
@@ -79,6 +84,61 @@ def _contract_command(args) -> int:
         print("INVALID")
         for issue in exc.issues:
             print(issue)
+        return 1
+    print("VALID")
+    return 0
+
+
+def _plan_command(args) -> int:
+    from pathlib import Path
+
+    from pydantic import ValidationError
+
+    from app.contracts.business_contract import ContractInvalid, load as load_contract
+    from app.contracts.feasibility_report import FeasibilityReport
+    from app.contracts.metadata_inventory import MetadataInventory
+    from app.contracts.model_plan import ExecutionPlan, ModelSpec, load_yaml, to_data
+    from app.discovery.plan_validation import validate_plan
+    from app.workflow.harvest_stage import canonical_hash
+
+    folder = Path(args.path)
+    for name in ("ModelSpec.yaml", "ExecutionPlan.yaml"):
+        if not (folder / name).is_file():
+            print(f"File not found: {folder / name}", file=sys.stderr)
+            return 2
+    try:
+        model = load_yaml(ModelSpec, folder / "ModelSpec.yaml")
+        plan = load_yaml(ExecutionPlan, folder / "ExecutionPlan.yaml")
+    except (ValidationError, ValueError) as exc:
+        print("INVALID")
+        if isinstance(exc, ValidationError):
+            for e in exc.errors():
+                print(f"  {'.'.join(str(p) for p in e['loc'])}: {e['msg']}")
+        else:
+            print(f"  {exc}")
+        return 1
+
+    inventory = feasibility = contract = None
+    if (folder / "MetadataInventory.json").is_file():
+        inventory = MetadataInventory.model_validate_json((folder / "MetadataInventory.json").read_text(encoding="utf-8"))
+    if (folder / "Feasibility.json").is_file():
+        feasibility = FeasibilityReport.model_validate_json((folder / "Feasibility.json").read_text(encoding="utf-8"))
+    if (folder / "BusinessContract.yaml").is_file():
+        try:
+            contract = load_contract(folder / "BusinessContract.yaml")
+        except ContractInvalid:
+            contract = None
+    result = validate_plan(model, plan, inventory, feasibility, contract, canonical_hash(to_data(model)))
+    failed = [c for c in result.checks if c.status == "fail"]
+    for c in result.checks:
+        if c.status == "warning":
+            for path in c.evidence.get("paths", [c.description]):
+                print(f"  warning {c.id}: {path}")
+    if failed:
+        print("INVALID")
+        for c in failed:
+            for path in c.evidence.get("paths", [c.description]):
+                print(f"  {c.id}: {path}")
         return 1
     print("VALID")
     return 0
@@ -121,6 +181,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)  # bad arguments exit 2
     if args.group == "contract":
         return _contract_command(args)
+    if args.group == "plan":
+        return _plan_command(args)
     try:
         return _run_command(args)
     except ValueError as exc:  # bad prompt, bad state name, bad RUN_STORE

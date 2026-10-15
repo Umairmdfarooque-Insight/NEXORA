@@ -404,9 +404,25 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+### T-404 — ExecutionPlan and ModelSpec generation
+
+**Before you start:** same setup as T-401 to T-403 (token in Swagger, API running, SQL consent). Run A: the Net Revenue KPI plus a monthly KPI such as `Monthly Revenue` (formula intent "sum of line totals", time logic "by month"), entities `Sales`, `Product` and `Customer`, scope `saleslt` and `nexora_test`. Do harvest and profile, then `POST /runs/{id}/relationships/analyze` with the joins the plan needs as user candidates (the model may propose some already): `{"candidates": [{"from": {"table": "saleslt.SalesLT_SalesOrderDetail", "column": "SalesOrderID"}, "to": {"table": "saleslt.SalesLT_SalesOrderHeader", "column": "SalesOrderID"}}, {"from": {"table": "saleslt.SalesLT_SalesOrderHeader", "column": "OrderDate"}, "to": {"table": "nexora_test.dim_date", "column": "Date"}}]}`. Then Accept the inventory, call `POST /runs/{id}/plan/sources` and `POST /runs/{id}/plan/feasibility`. Run B: the same with scope `saleslt` only (no date table).
+
+1. 🌐 **Plan generated.** `POST /runs/{run_A}/plan`. **Expected:** HTTP 200 with `execution_plan`, `model_spec` and `validation`. `runs\<run_A>\ModelSpec.yaml` and `ExecutionPlan.yaml` exist. `ModelSpec` has a `Sales` table with `role: fact`, `grain: order line` and source `SalesLT_SalesOrderDetail`. Its relationships go from Sales to Product and to the order header, and from the header to Customer and Date. Each has an `evidence_ref`: an id from `relationship_evidence` in `MetadataInventory.json` with `high` or `medium` confidence. `storage_mode` is `DirectLake`, `Date` has a `Calendar` hierarchy (Year, Quarter, Month), and `Net Revenue` is a measure with `dax: null`. `validation.passed` is `true`. The state is still `DATA_PROFILED`, and `GET /runs/{run_A}/artifacts` lists `ModelSpec` and `ExecutionPlan`.
+2. 🌐 **Bad reference caught.** In `runs\<run_A>\ModelSpec.yaml` change the `to:` column of the `Sales_Product` relationship to `NoSuchColumn`, then run `python -m app.cli plan validate runs\<run_A>`. **Expected:** `INVALID` and a line `PLAN.1: relationships[Sales_Product].to.column: Product.NoSuchColumn`, exit code 1. `GET /runs/{run_A}/plan` shows the same failure under `validation`. Undo the edit, or call `POST /runs/{run_A}/plan` to regenerate: the command prints `VALID` and exits 0.
+3. 🌐 **No inferred security.** Check `roles` in `ModelSpec.yaml` of run A, whose contract has no security requirements. **Expected:** `roles: []`. On a run whose contract has a security requirement (for example "Sales reps see only their region") the plan has one role `RLS1` with that description and `table_filters: []`.
+4. 🌐 **Missing date handled.** `POST /runs/{run_B}/plan` (scope without `dim_date`). **Expected:** `execution_plan.data_engineering_actions` has one `create_date_table` action (`blocking: true`, `owner: null`). `ModelSpec` has no table with `role: date` and no table without a `source`, so no calculated table. `validation.passed` is `true`.
+5. 🌐 **Evidence required.** In `ModelSpec.yaml` of run A set a relationship's `evidence_ref` to the id of a `low` entry of `relationship_evidence`, and run `python -m app.cli plan validate runs\<run_A>`. **Expected:** `PLAN.2: relationships[<name>]: evidence R<n> is low and there is no override with a rationale`. Adding `override_rationale: Confirmed with the data owner` to that relationship makes it `VALID`.
+6. 💻 **Offline checks.** `python -m app.manual_tests.t404_offline_checks`. **Expected:** `All checks passed.` (the plan for a normal star, hierarchy, hidden keys, evidence refs, determinism, the CLI as a command, every validation check failing with its path, RLS from the contract only, the date-table action, a bridge in the plan, only feasible KPIs, `NO_FEASIBLE_KPIS`, and the 404/409/500 cases).
+7. 💻 **Clean up.** Stop the API and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–5), which need your Entra token, SQL consent, the real model and the real Lakehouse. Claude ran step 6.
+
+---
+
 ## Next tasks
 
-Sections for T-404 and later are added when each task is implemented.
+Sections for T-405 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -432,6 +448,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t401_offline_checks.py` | T-401 | Fake-LLM checks of the glossary, source scoring, the conformed policy and `plan/sources` |
 | `app/manual_tests/t402_offline_checks.py` | T-402 | Fake-LLM checks of KPI feasibility, data gaps and `plan/feasibility` |
 | `app/manual_tests/t403_offline_checks.py` | T-403 | Fake-SQL checks of bridge detection, mapping-table evidence, derivation rules, approvals and `plan/bridges` |
+| `app/manual_tests/t404_offline_checks.py` | T-404 | Checks of ModelSpec and ExecutionPlan generation, plan validation, the `plan` endpoints and `cli plan validate` |
 
 ## Adding a task
 
