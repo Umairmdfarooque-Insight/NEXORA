@@ -11,21 +11,32 @@ from app.api.schemas import (
     RunSummary,
     ScopeRequest,
 )
+from app.api.security import Principal, current_user
 from app.connectors.fabric_api import FabricApiClient
 from app.store.base import RunStore
 from app.workflow.scope import bind_scope
 from app.workflow.states import RunState
 
-router = APIRouter(prefix="/runs", tags=["runs"])
+router = APIRouter(
+    prefix="/runs", tags=["runs"], dependencies=[Depends(current_user)]
+)
 
 # The store has no count query yet, so total is taken from an unbounded list.
 ALL_RUNS = 1_000_000
 
 
 @router.post("", status_code=201, response_model=RunDetail)
-def create_run(body: CreateRunRequest, store: RunStore = Depends(get_store)):
+def create_run(
+    body: CreateRunRequest,
+    store: RunStore = Depends(get_store),
+    user: Principal = Depends(current_user),
+):
     run = store.create(
-        body.prompt, body.subject_area, body.desired_outputs, body.constraints
+        body.prompt,
+        body.subject_area,
+        body.desired_outputs,
+        body.constraints,
+        created_by=user.model_dump(),
     )
     return RunDetail.from_run(run)
 

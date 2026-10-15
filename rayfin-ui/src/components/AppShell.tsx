@@ -1,6 +1,7 @@
 "use client";
 
-import { makeStyles, tokens } from "@fluentui/react-components";
+import { useMsal } from "@azure/msal-react";
+import { Button, makeStyles, tokens } from "@fluentui/react-components";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -28,6 +29,17 @@ const useStyles = makeStyles({
     textDecorationLine: "none",
   },
   nav: { display: "flex", columnGap: "8px" },
+  user: {
+    marginLeft: "auto",
+    display: "flex",
+    alignItems: "center",
+    columnGap: "12px",
+    fontSize: tokens.fontSizeBase300,
+  },
+  signOut: {
+    color: "inherit",
+    ":hover": { backgroundColor: tokens.colorBrandBackgroundHover, color: "inherit" },
+  },
   link: {
     color: "inherit",
     textDecorationLine: "none",
@@ -51,6 +63,8 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
   const styles = useStyles();
   const pathname = usePathname();
+  const { instance, accounts } = useMsal();
+  const account = accounts[0];
 
   return (
     <div className={styles.root}>
@@ -70,6 +84,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
+        {account && (
+          <div className={styles.user}>
+            <span title={account.username}>{account.name ?? account.username}</span>
+            <Button
+              size="small"
+              appearance="subtle"
+              className={styles.signOut}
+              onClick={() => void instance.logoutRedirect()}
+            >
+              Sign out
+            </Button>
+          </div>
+        )}
       </header>
       <main className={styles.main}>{children}</main>
     </div>

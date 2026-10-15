@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from app.api.deps import get_connector_factory, get_fabric_client, get_store
 from app.api.main import app
+from app.api.security import AuthContext, Principal, authenticate
 from app.connectors.fabric_api import (
     FABRIC_API,
     FabricApiClient,
@@ -106,6 +107,14 @@ LAKEHOUSES = {
         {"id": LH_NO_SQL, "displayName": "NewLakehouse", "workspaceId": WS, "properties": {}},
     ]
 }
+
+
+def fake_authenticate() -> AuthContext:
+    """Stands in for token validation; T-105's own checks cover the real thing."""
+    return AuthContext(
+        principal=Principal(oid="oid-1", upn="tester@contoso.com", name="Tester"),
+        token="test-token",
+    )
 
 
 def make_client(fake, sleeps=None):
@@ -215,6 +224,7 @@ def main() -> None:
         sleeps = []
         connector = FakeLakehouseConnector(["saleslt", "nexora_test"])
         app.dependency_overrides[get_store] = lambda: store
+        app.dependency_overrides[authenticate] = fake_authenticate
         app.dependency_overrides[get_fabric_client] = lambda: make_client(api_fake, sleeps)
         app.dependency_overrides[get_connector_factory] = lambda: (lambda scope: connector)
         client = TestClient(app, raise_server_exceptions=False)

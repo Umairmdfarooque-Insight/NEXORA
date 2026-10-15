@@ -53,3 +53,9 @@ FABRIC_WORKSPACE_NAME = get_optional_setting("FABRIC_WORKSPACE_NAME")
 FABRIC_LAKEHOUSE_NAME = get_optional_setting("FABRIC_LAKEHOUSE_NAME")
 FABRIC_SQL_SERVER = get_optional_setting("FABRIC_SQL_SERVER")
 FABRIC_SQL_DATABASE = get_optional_setting("FABRIC_SQL_DATABASE")
+
+# Entra ID sign-in for the API (T-105). Optional at import so scripts and the
+# CLI still run; the API refuses every protected request until they are set.
+ENTRA_TENANT_ID = get_optional_setting("ENTRA_TENANT_ID")
+ENTRA_API_CLIENT_ID = get_optional_setting("ENTRA_API_CLIENT_ID")
+ENTRA_API_CLIENT_SECRET = get_optional_setting("ENTRA_API_CLIENT_SECRET")

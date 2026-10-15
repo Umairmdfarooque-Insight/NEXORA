@@ -25,19 +25,30 @@ class FabricLakehouseConnector:
         workspace_id: str | None = None,
         lakehouse_id: str | None = None,
         lakehouse_name: str | None = None,
+        token_provider=None,
     ):
+        # With a token_provider (the API's on-behalf-of token for the signed-in
+        # user) it is used instead of the local interactive credential.
+        self._token_provider = token_provider
         self.workspace_id = workspace_id or FABRIC_WORKSPACE_ID
         self.lakehouse_id = lakehouse_id or FABRIC_LAKEHOUSE_ID
         self.lakehouse_name = lakehouse_name or FABRIC_LAKEHOUSE_NAME
 
     @classmethod
-    def for_scope(cls, scope) -> "FabricLakehouseConnector":
+    def for_scope(cls, scope, token_provider=None) -> "FabricLakehouseConnector":
         """Connector for a run's scope (a RunScope or an equivalent dict)."""
         get = scope.get if isinstance(scope, dict) else lambda k: getattr(scope, k)
-        return cls(get("workspace_id"), get("lakehouse_id"), get("lakehouse_name"))
+        return cls(
+            get("workspace_id"),
+            get("lakehouse_id"),
+            get("lakehouse_name"),
+            token_provider,
+        )
 
     def _get_headers(self) -> dict:
-        token = get_token(STORAGE_SCOPE)
+        token = (
+            self._token_provider() if self._token_provider else get_token(STORAGE_SCOPE)
+        )
 
         return {
             "Authorization": f"Bearer {token}",

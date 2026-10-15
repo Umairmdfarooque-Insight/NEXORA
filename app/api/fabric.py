@@ -4,9 +4,12 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_fabric_client
 from app.api.schemas import LakehouseItem, WorkspaceItem
+from app.api.security import current_user
 from app.connectors.fabric_api import FabricApiClient
 
-router = APIRouter(prefix="/fabric", tags=["fabric"])
+router = APIRouter(
+    prefix="/fabric", tags=["fabric"], dependencies=[Depends(current_user)]
+)
 
 
 @router.get("/workspaces", response_model=list[WorkspaceItem])

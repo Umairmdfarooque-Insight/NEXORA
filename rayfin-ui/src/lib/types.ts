@@ -22,6 +22,12 @@ export interface HistoryEntry {
   actor: string;
 }
 
+export interface Principal {
+  oid: string;
+  upn: string;
+  name: string;
+}
+
 export interface RunDetail {
   run_id: string;
   prompt: string;
@@ -31,6 +37,7 @@ export interface RunDetail {
   state: string;
   resume_state: string | null;
   scope: RunScope | null;
+  created_by: Principal | null;
   created_at: string;
   updated_at: string;
   history: HistoryEntry[];

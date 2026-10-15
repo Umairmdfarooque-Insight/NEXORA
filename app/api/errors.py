@@ -8,6 +8,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.obo import ConsentRequired, OboFailed
+from app.api.security import AuthConfigError, AuthError, AuthUpstreamError
 from app.connectors.fabric_api import (
     FabricError,
     FabricForbidden,
@@ -77,6 +79,33 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"from": exc.from_.value, "to": exc.to.value},
         )
+
+    @app.exception_handler(AuthError)
+    async def unauthenticated(request: Request, exc: AuthError):
+        return error_response(
+            401,
+            exc.code,
+            str(exc),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    @app.exception_handler(AuthConfigError)
+    async def auth_not_configured(request: Request, exc: AuthConfigError):
+        logger.error("%s", exc)
+        return error_response(500, "CONFIG_ERROR", str(exc))
+
+    @app.exception_handler(AuthUpstreamError)
+    async def auth_upstream(request: Request, exc: AuthUpstreamError):
+        logger.error("%s", exc)
+        return error_response(502, "UPSTREAM_ERROR", str(exc))
+
+    @app.exception_handler(ConsentRequired)
+    async def consent_required(request: Request, exc: ConsentRequired):
+        return error_response(403, "CONSENT_REQUIRED", str(exc))
+
+    @app.exception_handler(OboFailed)
+    async def obo_failed(request: Request, exc: OboFailed):
+        return error_response(502, "UPSTREAM_ERROR", str(exc))
 
     @app.exception_handler(ScopeLocked)
     async def scope_locked(request: Request, exc: ScopeLocked):
