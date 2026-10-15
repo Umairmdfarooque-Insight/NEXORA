@@ -16,15 +16,8 @@ from app.discovery.data_profiler import candidate_tables, profile_tables, table_
 from app.store.base import RunStore
 from app.workflow.clarification import NotFound
 from app.workflow.compile_stage import WrongState, load_current_contract
-from app.workflow.harvest_stage import (
-    ARTIFACT,
-    CURRENT,
-    ScopeMissing,
-    canonical_hash,
-    load_inventory,
-    write_json,
-)
-from app.workflow.run import RunScope, utc_now
+from app.workflow.harvest_stage import ScopeMissing, load_inventory, save_inventory
+from app.workflow.run import RunScope
 from app.workflow.states import RunState
 
 PROFILE_STATES = (RunState.REQUIREMENT_APPROVED, RunState.DATA_PROFILED)
@@ -71,15 +64,7 @@ def profile_run(
         profile = profiles.get(table_key(table))
         if profile is not None:
             table.profile = profile
-    data = inventory.to_dict()
-    run_dir = Path(runs_root) / run_id
-    write_json(run_dir / CURRENT, data)
-    write_json(run_dir / "inventories" / f"MetadataInventory.v{inventory.version}.json", data)
-
-    ref = run.artifacts[ARTIFACT]
-    ref.hash = canonical_hash(data)
-    ref.updated_at = utc_now()
-    store.save(run)
+    save_inventory(store, runs_root, run, inventory)
     return profiles
 
 

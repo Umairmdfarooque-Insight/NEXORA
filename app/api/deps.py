@@ -10,6 +10,7 @@ from app.api.security import user_token
 from app.auth import FABRIC_SCOPE, SQL_SCOPE, STORAGE_SCOPE
 from app.connectors.fabric_api import FabricApiClient
 from app.compiler.requirement_compiler import LlmCall, default_llm
+from app.discovery.relationship_candidates import RelationshipLlm, default_relationship_llm
 from app.config import PROJECT_ROOT
 from app.connectors.fabric_lakehouse import FabricLakehouseConnector
 from app.connectors.fabric_sql_connector import FabricSQLConnector
@@ -33,6 +34,10 @@ def get_runs_root() -> Path:
 
 def get_llm() -> LlmCall:
     return default_llm()
+
+
+def get_relationship_llm() -> RelationshipLlm:
+    return default_relationship_llm()
 
 
 def get_fabric_client(

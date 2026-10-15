@@ -8,11 +8,14 @@ from app.api.deps import (
     get_connector_factory,
     get_fabric_client,
     get_llm,
+    get_relationship_llm,
     get_runs_root,
     get_sql_connector_factory,
     get_store,
 )
 from app.api.schemas import (
+    AnalyzeRelationshipsRequest,
+    AnalyzeRelationshipsResponse,
     AnswerRequest,
     ApprovalRequest,
     ApprovalResponse,
@@ -47,7 +50,11 @@ from app.workflow.compile_stage import compile_run, current_contract, open_quest
 from app.contracts.metadata_inventory import MetadataInventory
 from app.workflow.gates import GateResult
 from app.workflow.harvest_stage import ARTIFACT as INVENTORY, harvest_run, load_inventory, summary
+from app.contracts.metadata_inventory import RelationshipEvidence
+from app.discovery.relationship_candidates import Candidate
 from app.workflow.profile_stage import profile_run, summarize
+from app.workflow.relationship_stage import analyze_run, list_relationships
+from app.workflow.relationship_stage import summarize as summarize_relationships
 from app.workflow.scope import bind_scope
 from app.workflow.states import RunState
 
@@ -291,6 +298,35 @@ def profile(
         tables=body.tables if body else None,
     )
     return ProfileResponse(**summarize(profiles))
+
+
+@router.post("/{run_id}/relationships/analyze", response_model=AnalyzeRelationshipsResponse)
+def analyze_relationships(
+    run_id: str,
+    body: AnalyzeRelationshipsRequest | None = None,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    sql_connector_for_scope=Depends(get_sql_connector_factory),
+    llm=Depends(get_relationship_llm),
+):
+    extra = [
+        Candidate("user", c.from_.table, c.from_.column, c.to.table, c.to.column)
+        for c in (body.candidates if body else [])
+    ]
+    evidence, warnings = analyze_run(
+        store, runs_root, run_id, sql_connector_for_scope, llm=llm, extra=extra
+    )
+    return AnalyzeRelationshipsResponse(**summarize_relationships(evidence), warnings=warnings)
+
+
+@router.get("/{run_id}/relationships", response_model=list[RelationshipEvidence])
+def get_relationships(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    store.get(run_id)
+    return list_relationships(runs_root, run_id)
 
 
 @router.get("/{run_id}/inventory", response_model=MetadataInventory, response_model_by_alias=True)

@@ -318,9 +318,25 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+### T-303 — Relationship evidence
+
+**Before you start:** same setup as T-302 (token in Swagger, API running, your UPN in `business_owner`, SQL consent; restore `config\roles.yaml` afterwards). Use run A (harvested for `saleslt`) and run B (harvested for `saleslt` and `nexora_test`, so it includes `dim_product_dupes`). Missing profiles are computed automatically. The model's suggestions need the real model; the analysis itself needs only the SQL endpoint. Run the SQL checks in the Lakehouse SQL endpoint in Fabric.
+
+1. 🌐 **Real join measured.** `POST /runs/{run_A}/relationships/analyze` (no body). **Expected:** HTTP 200 with `{"candidates": n, "high": n, "medium": n, "low": n, "rejected": n, "warnings": []}`. `GET /runs/{run_A}/relationships` contains an entry from `saleslt.SalesLT_SalesOrderDetail.ProductID` to `saleslt.SalesLT_Product.ProductID` with `cardinality: many_to_one`, `confidence: high` and `source: heuristic`. Run `python -m app.test_product_mapping`: its `Detail rows` and `Matched detail rows` give the orphan rate, `(detail_rows - matched_rows) / detail_rows * 100`, which equals `orphan_rate`. `evidence.queries` shows the SQL that ran.
+2. 🌐 **Bad join is low confidence.** `POST /runs/{run_A}/relationships/analyze` with `{"candidates": [{"from": {"table": "saleslt.SalesLT_SalesOrderDetail", "column": "ProductID"}, "to": {"table": "saleslt.SalesLT_Customer", "column": "CustomerID"}}]}`. **Expected:** that entry has `source: user`, `confidence: low` and a small `overlap_pct` (compare with `SELECT COUNT(DISTINCT d.ProductID), COUNT(DISTINCT c.CustomerID) FROM saleslt.SalesLT_SalesOrderDetail d JOIN saleslt.SalesLT_Customer c ON d.ProductID = c.CustomerID`). A pair of different types, such as `SalesLT_Product.Name` to `SalesLT_Customer.CustomerID`, gives `type_compatible: false`, `confidence: low` and no queries.
+3. 🌐 **Invalid relationship evidence.** `POST /runs/{run_B}/relationships/analyze`, then look for entries whose `to.table` is `nexora_test.dim_product_dupes`. **Expected:** `cardinality: many_to_many`, `confidence: low` and a note "The target column is not unique, so this can't be many-to-one". `SELECT ProductID, COUNT(*) c FROM nexora_test.dim_product_dupes GROUP BY ProductID HAVING COUNT(*) > 1` returns at least 3 rows, so the target really isn't unique.
+4. 🌐 **Hallucinated column rejected.** The model may or may not invent one, so inject it: this needs the offline check (step 6), which feeds the analysis a model answer with `Product.NoSuchColumn`. **Expected:** `status: rejected`, `rejected_reason: "column not in inventory"`. By hand you can still check a user candidate with a column that doesn't exist (`"column": "NoSuchColumn"`): it is rejected the same way.
+5. 🌐 **Stored and cleared.** Open `runs\<run_A>\MetadataInventory.json`: `relationship_evidence` holds the same entries and the profiles of the tables used. `POST /runs/{run_A}/harvest` again. **Expected:** `GET /runs/{run_A}/relationships` is `[]`.
+6. 💻 **Offline checks.** `python -m app.manual_tests.t303_offline_checks`. **Expected:** `All checks passed.` (fake SQL endpoint and model: heuristics, LLM and user candidates, the unique/duplicate/null/orphan/overlap numbers, high/medium/low, one_to_one/many_to_one/many_to_many, rejections for hallucinated table and column, self-relationship and missing profile, type mismatch with no join query, names-and-types-only model payload, model failure degrading to a warning, replaced evidence, cleared on re-harvest, and the 404/409/422/400 cases).
+7. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–5), which need your Entra token, SQL consent, the real model and the real Lakehouse. Claude ran step 6.
+
+---
+
 ## Next tasks
 
-Sections for T-303 and later are added when each task is implemented.
+Sections for T-304 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -341,6 +357,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t205_offline_checks.py` | T-205 | Checks of `contract` and `artifacts` in the run detail and `GET /me` |
 | `app/manual_tests/t301_offline_checks.py` | T-301 | Fake-Lakehouse checks of the harvester, versioning and the harvest/inventory endpoints |
 | `app/manual_tests/t302_offline_checks.py` | T-302 | Fake-SQL-endpoint checks of the data profiler and the profile endpoint |
+| `app/manual_tests/t303_offline_checks.py` | T-303 | Fake-SQL-and-LLM checks of relationship candidates, evidence, rejections and the endpoints |
 
 ## Adding a task
 

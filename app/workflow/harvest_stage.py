@@ -121,6 +121,19 @@ def harvest_run(
     return store.get(run_id), inventory
 
 
+def save_inventory(store: RunStore, runs_root: Path, run: Run, inventory: MetadataInventory) -> None:
+    """Write `inventory` over its current file and its same-version copy (after profiles or
+    evidence were added) and update the artifact's hash. The harvest version doesn't change."""
+    data = inventory.to_dict()
+    run_dir = Path(runs_root) / run.run_id
+    write_json(run_dir / CURRENT, data)
+    write_json(run_dir / "inventories" / f"MetadataInventory.v{inventory.version}.json", data)
+    ref = run.artifacts[ARTIFACT]
+    ref.hash = canonical_hash(data)
+    ref.updated_at = utc_now()
+    store.save(run)
+
+
 def load_inventory(runs_root: Path, run_id: str) -> MetadataInventory:
     path = Path(runs_root) / run_id / CURRENT
     if not path.is_file():
