@@ -11,7 +11,7 @@ Nexora is the AI engine behind a UI called "Rayfin" (`APP_NAME` / `UI_APP_NAME` 
 The target product is defined in `.claude/spec/` (requirements FR/NFR, business rules, acceptance scenarios) and `.claude/technical-documentation/` (architecture, artifact contracts, run states, gates G1–G6, milestones, open decisions). Both are transcribed from `Nexora_Specification_and_Technical_Design.docx` (v0.1 draft). Read them before adding a new pipeline stage.
 
 The code is an early slice of the design and does not yet produce its artifacts. Mapping of current code to the design:
-- `requirement_analyzer.py` → Requirement Compiler (M2). It returns a `RequirementSpec`, not `BusinessContract.yaml`, and has no approval or clarification loop.
+- `requirement_analyzer.py` → the old prototype of the Requirement Compiler. The real one is `app/compiler/` (T-202): it produces `BusinessContract.yaml`. The approval loop comes with T-203/T-204.
 - `metadata_inventory.py`, `data_profiler.py`, `semantic_mapper.py`, `relationship_validator.py` → Metadata Harvester and relationship evidence (M3, FR-005–FR-007).
 - Not started: the Rayfin UI and run store (M1), planning (M4), TMDL/DAX (M5), reports (M6), retries, deployment and audit (M7).
 
@@ -58,7 +58,11 @@ Fabric access for runs: `connectors/fabric_api.py` (`FabricApiClient`) lists wor
 
 ## Business contract
 
-`app/contracts/business_contract.py` defines `BusinessContract` (pydantic, `extra="forbid"`) and its parts (`Kpi`, `OpenQuestion`, `LockedFact`, `Feasibility`). `load`/`save` read and write `BusinessContract.yaml` deterministically (fixed key order, UTF-8, LF; `save` returns the `sha256:` hash). The approval rules (no open blocking question; every KPI has `formula_intent`, `grain` and `currency`; unique KPI names and ids) live in the model, not in prompts. `schemas/business_contract.schema.json` is the committed JSON Schema (regenerate with `contract schema --output`); `samples/contract_valid.yaml` is the reference sample. Nothing writes a contract into a run yet (T-202).
+`app/contracts/business_contract.py` defines `BusinessContract` (pydantic, `extra="forbid"`) and its parts (`Kpi`, `OpenQuestion`, `LockedFact`, `Feasibility`). `load`/`save` read and write `BusinessContract.yaml` deterministically (fixed key order, UTF-8, LF; `save` returns the `sha256:` hash). The approval rules (no open blocking question; every KPI has `formula_intent`, `grain` and `currency`; unique KPI names and ids) live in the model, not in prompts. `schemas/business_contract.schema.json` is the committed JSON Schema (regenerate with `contract schema --output`); `samples/contract_valid.yaml` is the reference sample. 
+
+### Requirement Compiler (T-202)
+
+`POST /runs/{id}/compile` (`workflow/compile_stage.py`, `compile_run`) is allowed in `CREATED` and `NEEDS_CLARIFICATION` only (`409 WRONG_STATE` otherwise). It runs the `compile` LangGraph (`graphs/compile.py`, run through `graphs/base.py:run_graph`): `llm_compile → validate_schema → (one retry with the errors) → apply_critical_terms → apply_locked_facts`. The LLM call (`llm/structured.py`, Responses API, strict JSON Schema, 60 s) gets only the prompt, subject area, outputs, constraints and the previous contract. `config/critical_terms.yaml` lists the business-critical terms; one used without a definition always gets a blocking `RULE-<TERM>` question (`compiler/critical_terms.py`), and no KPI gives `RULE-METRIC`. The service writes `runs/<id>/BusinessContract.yaml` and `contracts/BusinessContract.v<n>.yaml`, registers the artifact and moves the state (`NEEDS_CLARIFICATION` while a blocking question is open, else `CREATED`). The graph itself never touches run state. Tests inject a fake LLM through `build_compile_graph(llm=…)` or the `get_llm` dependency.
 
 ## Architecture
 

@@ -10,3 +10,4 @@ uvicorn
 httpx
 PyJWT[crypto]
 msal
+langgraph>=1.0,<2

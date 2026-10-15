@@ -203,9 +203,30 @@ Needs Node.js 20 or later (checked with 24) and two terminals. Run the API from 
 
 ---
 
-## M3 onward
+### T-202 — Requirement Compiler with ambiguity detection
 
-Sections for T-202 and later are added when each task is implemented.
+**Before you start:** `pip install -r requirements.txt` (adds `langgraph`). Do the T-105 setup so you have a token (see "Getting a token for curl or Swagger"). Start the API in the terminal you will watch for the log line in step 7: `uvicorn app.api.main:app --port 8000`. In Swagger (<http://localhost:8000/docs>) click **Authorize** and paste the token. The compile steps call the real Azure OpenAI deployment and take a few seconds.
+
+To create a run without the UI, use `POST /runs` in Swagger with `{"prompt": "…"}` and copy the `run_id`.
+
+1. 🌐 **Ambiguous Revenue stops.** Create a run with the prompt `Show revenue by month for 2024`, then `POST /runs/{run_id}/compile`. **Expected:** HTTP 200, `run.state` is `NEEDS_CLARIFICATION`, `blocking_questions` is `1`, and `run.open_questions` has `{"id": "RULE-REVENUE", "text": "How is Revenue defined?", "blocking": true, "source": "rule", …}`. The contract has KPI `Revenue` with `formula_intent: null` and dimension `Month`. In the UI (<http://localhost:3000/runs/{run_id}>) the run shows the question with "(blocking)" and the next action "Answer open questions". Other questions the model adds are fine, as long as none repeats the Revenue question.
+2. 🌐 **Explicit definition passes.** Create a run with `Show Net Revenue by month for 2024. Net Revenue = SUM(LineTotal) excluding cancelled orders, in USD.` and compile it. **Expected:** `run.state` is `CREATED`, `blocking_questions` is `0`, no Revenue question, and the KPI `formula_intent` mentions `LineTotal` and the exclusion of cancelled orders.
+3. 🌐 **Repeatable structure.** Create two new runs with the step 2 prompt and compile both. **Expected:** the same KPI names, dimensions and set of question texts in both contracts (the wording of `rationale` or `formula_intent` may differ).
+4. 💻 **Valid file.** `python -m app.cli contract validate runs\<run_id>\BusinessContract.yaml`. **Expected:** `VALID`.
+5. 🌐 **Versioning.** Compile the step 1 run a second time. **Expected:** `runs\<run_id>\contracts\` holds `BusinessContract.v1.yaml` and `BusinessContract.v2.yaml`, `runs\<run_id>\BusinessContract.yaml` equals v2, and `GET /runs/{run_id}/artifacts` lists `BusinessContract` with `version: 2`, `status: draft` and a `sha256:` hash.
+6. 🌐 **Wrong state.** Create a run, then `python -m app.cli runs transition <run_id> REQUIREMENT_APPROVED`, then `POST /runs/{run_id}/compile`. **Expected:** HTTP 409 with `"code": "WRONG_STATE"` naming the state, and no `contracts\` folder in that run.
+7. 🌐 **Graph boundary.** For the step 1 run, `python -m app.cli runs show <run_id>`. **Expected:** `history` has exactly two entries (`null → CREATED` and `CREATED → NEEDS_CLARIFICATION`), even after the second compile in step 5. In the terminal running uvicorn, each compile logged a line like `INFO: app.graphs.base: stage=compile run_id=<run_id> node_path=llm_compile -> validate_schema -> apply_critical_terms -> apply_locked_facts`.
+8. 🌐 **Bad config stops the API.** Stop the API. Rename `config\critical_terms.yaml` to `critical_terms.bak` and start it again. **Expected:** startup fails with `Configuration file critical_terms.yaml is missing`. Rename the file back and restart.
+9. 💻 **Offline checks.** `python -m app.manual_tests.t202_offline_checks`. **Expected:** `All checks passed.` (80 checks with a fake LLM: the rules, the retry and the 2-attempt limit, `LLM_INVALID_OUTPUT` with the raw output saved under `logs\`, timeout and content-filter errors, versioning, locked facts, state changes and the log line).
+10. 💻 **Clean up.** Stop the API. Delete the test runs' folders under `runs\` if they were only test data.
+
+**Not run by Claude:** the API steps (1–3, 5–8), which need your Entra token. Claude did run the real model once through `compile_requirement` and the stage service in a temporary folder with both step 1 and step 2 prompts, and got the results described above.
+
+---
+
+## Next tasks
+
+Sections for T-203 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -220,6 +241,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t103_connectors_check.py` | T-103 | Live check that scope-based connectors reach the Lakehouse and its SQL endpoint |
 | `app/manual_tests/t105_offline_checks.py` | T-105 | Throwaway-key JWT checks of token validation, OBO, attribution and the auth gate |
 | `app/manual_tests/t201_offline_checks.py` | T-201 | Checks of BusinessContract validation, round trip, CLI and schema export |
+| `app/manual_tests/t202_offline_checks.py` | T-202 | Fake-LLM checks of the compile graph, ambiguity rules, versioning and the /compile endpoint |
 
 ## Adding a task
 

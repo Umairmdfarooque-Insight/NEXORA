@@ -1,6 +1,7 @@
 """Shared FastAPI dependencies."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from fastapi import Depends
 
@@ -8,6 +9,8 @@ from app.api.obo import get_msal_app, obo_token_provider
 from app.api.security import user_token
 from app.auth import FABRIC_SCOPE, STORAGE_SCOPE
 from app.connectors.fabric_api import FabricApiClient
+from app.compiler.requirement_compiler import LlmCall, default_llm
+from app.config import PROJECT_ROOT
 from app.connectors.fabric_lakehouse import FabricLakehouseConnector
 from app.store.base import RunStore
 from app.store.factory import get_run_store
@@ -20,6 +23,15 @@ def _store() -> RunStore:
 
 def get_store() -> RunStore:
     return _store()
+
+
+def get_runs_root() -> Path:
+    """Where run artifact files (contracts, logs) live. Both stores keep them here."""
+    return PROJECT_ROOT / "runs"
+
+
+def get_llm() -> LlmCall:
+    return default_llm()
 
 
 def get_fabric_client(

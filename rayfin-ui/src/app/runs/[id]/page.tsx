@@ -146,9 +146,10 @@ export default function RunDetailPage() {
                 <Body1>None</Body1>
               ) : (
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  {run.open_questions.map((question, index) => (
-                    <li key={index}>
-                      {typeof question === "string" ? question : JSON.stringify(question)}
+                  {run.open_questions.map((question) => (
+                    <li key={question.id}>
+                      {question.text}
+                      {question.blocking ? " (blocking)" : ""}
                     </li>
                   ))}
                 </ul>

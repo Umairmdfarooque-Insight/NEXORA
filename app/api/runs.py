@@ -1,10 +1,19 @@
 """Run endpoints. Handlers only call the RunStore and shape the response."""
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import get_connector_factory, get_fabric_client, get_store
+from app.api.deps import (
+    get_connector_factory,
+    get_fabric_client,
+    get_llm,
+    get_runs_root,
+    get_store,
+)
 from app.api.schemas import (
     ArtifactItem,
+    CompileResponse,
     CreateRunRequest,
     RunDetail,
     RunList,
@@ -14,6 +23,7 @@ from app.api.schemas import (
 from app.api.security import Principal, current_user
 from app.connectors.fabric_api import FabricApiClient
 from app.store.base import RunStore
+from app.workflow.compile_stage import compile_run, open_questions
 from app.workflow.scope import bind_scope
 from app.workflow.states import RunState
 
@@ -54,8 +64,30 @@ def list_runs(
 
 
 @router.get("/{run_id}", response_model=RunDetail)
-def get_run(run_id: str, store: RunStore = Depends(get_store)):
-    return RunDetail.from_run(store.get(run_id))
+def get_run(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    run = store.get(run_id)
+    return RunDetail.from_run(run, open_questions=open_questions(runs_root, run_id))
+
+
+@router.post("/{run_id}/compile", response_model=CompileResponse)
+def compile_requirement(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    llm=Depends(get_llm),
+    user: Principal = Depends(current_user),
+):
+    run, contract = compile_run(store, runs_root, run_id, actor=user.upn, llm=llm)
+    questions = open_questions(runs_root, run_id)
+    return CompileResponse(
+        run=RunDetail.from_run(run, open_questions=questions),
+        contract=contract,
+        blocking_questions=sum(1 for q in questions if q["blocking"]),
+    )
 
 
 @router.put("/{run_id}/scope", response_model=RunDetail)
