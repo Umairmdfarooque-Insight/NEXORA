@@ -32,6 +32,7 @@ class CompileState(TypedDict, total=False):
     attempts_log: list[dict]
     draft: Any  # BusinessContract | None
     contract: Any  # BusinessContract | None
+    warnings: list[str]
 
 
 def build_compile_graph(llm: Callable[[str, str, dict], str], config: CriticalTerms):
@@ -67,7 +68,11 @@ def build_compile_graph(llm: Callable[[str, str, dict], str], config: CriticalTe
         return {"contract": contract}
 
     def locked_facts(state: CompileState) -> dict:
-        return {"contract": apply_locked_facts(state["contract"], state.get("previous"))}
+        warnings: list[str] = []
+        contract = apply_locked_facts(
+            state["contract"], state.get("previous"), config, warnings
+        )
+        return {"contract": contract, "warnings": [*state.get("warnings", []), *warnings]}
 
     graph = StateGraph(CompileState)
     graph.add_node("llm_compile", llm_compile)

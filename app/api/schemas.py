@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
-from app.contracts.business_contract import BusinessContract
+from app.contracts.business_contract import BusinessContract, ExpectedExample
 from app.workflow.next_action import next_action
 from app.workflow.run import MAX_PROMPT_LENGTH, Run
 from app.workflow.states import RunState
@@ -82,6 +82,39 @@ class CompileResponse(BaseModel):
     run: RunDetail
     contract: BusinessContract
     blocking_questions: int
+
+
+class AnswerRequest(BaseModel):
+    answer: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
+class DismissRequest(BaseModel):
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
+class QuestionResponse(BaseModel):
+    run: RunDetail
+    contract: BusinessContract
+
+
+class KpiEditRequest(BaseModel):
+    """Partial Kpi: only the fields sent are changed."""
+
+    model_config = {"extra": "forbid"}
+
+    expected_hash: str
+    formula_intent: str | None = None
+    grain: str | None = None
+    filters: list[str] | None = None
+    time_logic: str | None = None
+    exclusions: list[str] | None = None
+    currency: str | None = None
+    expected_examples: list[ExpectedExample] | None = None
+    rationale: str | None = None
+
+
+class KpiEditResponse(BaseModel):
+    contract: BusinessContract
 
 
 class ScopeRequest(BaseModel):

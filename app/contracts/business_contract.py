@@ -36,6 +36,7 @@ class QuestionSource(str, Enum):
 class QuestionStatus(str, Enum):
     OPEN = "open"
     ANSWERED = "answered"
+    DISMISSED = "dismissed"  # non-blocking question closed with a reason (T-203)
 
 
 class FeasibilityStatus(str, Enum):
@@ -79,6 +80,7 @@ class OpenQuestion(_Strict):
     source: QuestionSource = QuestionSource.RULE
     status: QuestionStatus = QuestionStatus.OPEN
     answer: str | None = None
+    dismiss_reason: str | None = None
 
 
 class LockedFact(_Strict):
@@ -162,6 +164,13 @@ def rule_issues(contract: BusinessContract) -> list[str]:
             if value in seen:
                 issues.append(f"{label}.{index}.id: duplicate id {value!r}")
             seen.add(value)
+
+    for index, question in enumerate(contract.open_questions):
+        if question.blocking and question.status is QuestionStatus.DISMISSED:
+            issues.append(
+                f"open_questions.{index}.status: blocking question {question.id} "
+                "can't be dismissed"
+            )
 
     question_ids = {q.id for q in contract.open_questions}
     for index, fact in enumerate(contract.locked_facts):
@@ -306,4 +315,5 @@ __all__ = [
     "check",
     "json_schema",
     "open_blocking_questions",
+    "QuestionStatus",
 ]

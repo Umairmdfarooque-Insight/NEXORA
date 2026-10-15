@@ -31,6 +31,7 @@ from app.llm.errors import (
     LlmUpstreamError,
     PromptRejected,
 )
+from app.workflow.clarification import ContractLocked, NotFound, QuestionConflict, StaleVersion
 from app.workflow.compile_stage import WrongState
 from app.workflow.scope import SchemaNotFound, ScopeLocked
 
@@ -123,6 +124,27 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"state": exc.state.value, "allowed": [s.value for s in exc.allowed]},
         )
+
+    @app.exception_handler(NotFound)
+    async def contract_item_not_found(request: Request, exc: NotFound):
+        return error_response(404, "NOT_FOUND", str(exc))
+
+    @app.exception_handler(ContractLocked)
+    async def contract_locked(request: Request, exc: ContractLocked):
+        return error_response(409, "CONTRACT_LOCKED", str(exc))
+
+    @app.exception_handler(StaleVersion)
+    async def stale_version(request: Request, exc: StaleVersion):
+        return error_response(
+            409,
+            "STALE_VERSION",
+            str(exc),
+            {"expected_hash": exc.expected, "current_hash": exc.current},
+        )
+
+    @app.exception_handler(QuestionConflict)
+    async def question_conflict(request: Request, exc: QuestionConflict):
+        return error_response(409, "QUESTION_CONFLICT", str(exc))
 
     @app.exception_handler(LlmInvalidOutput)
     async def llm_invalid_output(request: Request, exc: LlmInvalidOutput):
