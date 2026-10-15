@@ -2,6 +2,8 @@
 
 from functools import lru_cache
 
+from app.connectors.fabric_api import FabricApiClient
+from app.connectors.fabric_lakehouse import FabricLakehouseConnector
 from app.store.base import RunStore
 from app.store.factory import get_run_store
 
@@ -13,3 +15,11 @@ def _store() -> RunStore:
 
 def get_store() -> RunStore:
     return _store()
+
+
+def get_fabric_client() -> FabricApiClient:
+    return FabricApiClient()
+
+
+def get_connector_factory():
+    return FabricLakehouseConnector.for_scope

@@ -2,11 +2,19 @@
 
 import logging
 
+from azure.core.exceptions import ClientAuthenticationError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.connectors.fabric_api import (
+    FabricError,
+    FabricForbidden,
+    FabricNotFound,
+    FabricRateLimited,
+    FabricTimeout,
+)
 from app.store.base import (
     IllegalTransition,
     RunCorrupt,
@@ -14,16 +22,26 @@ from app.store.base import (
     StoreUnavailable,
 )
 
+from app.workflow.scope import SchemaNotFound, ScopeLocked
+
 logger = logging.getLogger(__name__)
 
 HTTP_CODES = {404: "NOT_FOUND"}
 
 
 def error_response(
-    status: int, code: str, message: str, details: dict | None = None
+    status: int,
+    code: str,
+    message: str,
+    details: dict | None = None,
+    headers: dict | None = None,
 ) -> JSONResponse:
     body = {"error": {"code": code, "message": message, "details": details or {}}}
-    return JSONResponse(status_code=status, content=body)
+    return JSONResponse(status_code=status, content=body, headers=headers)
+
+
+def _fabric_details(exc: FabricError) -> dict:
+    return {"fabric_request_id": exc.request_id} if exc.request_id else {}
 
 
 def register_error_handlers(app: FastAPI) -> None:
@@ -59,6 +77,49 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"from": exc.from_.value, "to": exc.to.value},
         )
+
+    @app.exception_handler(ScopeLocked)
+    async def scope_locked(request: Request, exc: ScopeLocked):
+        return error_response(409, "SCOPE_LOCKED", str(exc), {"state": exc.state.value})
+
+    @app.exception_handler(SchemaNotFound)
+    async def schema_not_found(request: Request, exc: SchemaNotFound):
+        return error_response(404, "SCHEMA_NOT_FOUND", str(exc), {"schema": exc.schema})
+
+    @app.exception_handler(FabricForbidden)
+    async def fabric_forbidden(request: Request, exc: FabricForbidden):
+        return error_response(403, "FORBIDDEN", str(exc), _fabric_details(exc))
+
+    @app.exception_handler(FabricNotFound)
+    async def fabric_not_found(request: Request, exc: FabricNotFound):
+        return error_response(404, "NOT_FOUND", str(exc), _fabric_details(exc))
+
+    @app.exception_handler(FabricRateLimited)
+    async def fabric_rate_limited(request: Request, exc: FabricRateLimited):
+        details = _fabric_details(exc) | {"retry_after": exc.retry_after}
+        return error_response(
+            429,
+            "RATE_LIMITED",
+            f"{exc}. Try again in {exc.retry_after} seconds.",
+            details,
+            headers={"Retry-After": str(exc.retry_after)},
+        )
+
+    @app.exception_handler(FabricTimeout)
+    async def fabric_timeout(request: Request, exc: FabricTimeout):
+        return error_response(504, "UPSTREAM_TIMEOUT", str(exc), _fabric_details(exc))
+
+    @app.exception_handler(FabricError)
+    async def fabric_error(request: Request, exc: FabricError):
+        logger.error("Fabric error: %s (request id %s)", exc, exc.request_id)
+        suffix = f" (Fabric request ID: {exc.request_id})" if exc.request_id else ""
+        return error_response(
+            502, "UPSTREAM_ERROR", f"{exc}{suffix}", _fabric_details(exc)
+        )
+
+    @app.exception_handler(ClientAuthenticationError)
+    async def sign_in_failed(request: Request, exc: ClientAuthenticationError):
+        return error_response(401, "UNAUTHENTICATED", str(exc.message or "Sign-in failed"))
 
     @app.exception_handler(StoreUnavailable)
     async def store_unavailable(request: Request, exc: StoreUnavailable):

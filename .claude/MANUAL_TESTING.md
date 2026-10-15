@@ -95,9 +95,27 @@ Start the API in one terminal (leave it running): `uvicorn app.api.main:app --re
 
 ---
 
+### T-103 — Workspace and Lakehouse selection
+
+Start the API in one terminal (leave it running): `uvicorn app.api.main:app --reload --port 8000`. The first call that reaches Fabric opens a browser sign-in in that terminal's process. Use `curl.exe` (not `curl`) in PowerShell, or the Swagger page at <http://localhost:8000/docs>. Create a run first: `curl.exe -X POST http://localhost:8000/runs -H "Content-Type: application/json" -d "{\"prompt\":\"Total sales by month\"}"`, and note its `run_id`. Use the sandbox workspace.
+
+1. 🌐 **Workspaces match the portal.** `curl.exe http://localhost:8000/fabric/workspaces`. **Expected:** a list of `{"id","display_name","type"}` that matches the workspaces you see in the Fabric portal. Note the sandbox workspace `id`.
+2. 🌐 **Lakehouses match.** `curl.exe http://localhost:8000/fabric/workspaces/<workspace_id>/lakehouses`. **Expected:** the same Lakehouses as the portal, each with `sql_endpoint` `{"server","database"}` filled in (`null` only for a Lakehouse whose SQL endpoint isn't ready). Note the `id` of the sales Lakehouse.
+3. 🌐 **Bind scope.** `curl.exe -X PUT http://localhost:8000/runs/<run_id>/scope -H "Content-Type: application/json" -d "{\"workspace_id\":\"<workspace_id>\",\"lakehouse_id\":\"<lakehouse_id>\",\"schemas\":[\"saleslt\"]}"`, then `curl.exe http://localhost:8000/runs/<run_id>`. **Expected:** HTTP 200, and `scope` shows both IDs, `lakehouse_name`, `workspace_name`, `schemas: ["saleslt"]` and the `sql_endpoint`. The state stays `CREATED`.
+4. 🌐 **Invalid ID refused.** Repeat step 3 with `"workspace_id":"99999999-9999-4999-8999-999999999999"`, then `GET /runs/<run_id>`. **Expected:** HTTP 403 and `"code":"FORBIDDEN"`; `scope` is unchanged from step 3. Repeat with a random `lakehouse_id` for the right workspace: also 403.
+5. 🌐 **Bad schema.** Repeat step 3 with `"schemas":["does_not_exist"]`. **Expected:** HTTP 404, `"code":"SCHEMA_NOT_FOUND"`, and the message names `does_not_exist`. `scope` is unchanged.
+6. 💻 **Bad input.** Repeat step 3 with `"workspace_id":"abc"`. **Expected:** HTTP 422 `VALIDATION_ERROR`. Use an unknown run ID in the URL: HTTP 404 `RUN_NOT_FOUND`.
+7. 🌐 **Scope locks.** `python -m app.cli runs transition <run_id> REQUIREMENT_APPROVED`, then repeat step 3. **Expected:** HTTP 200 (no metadata inventory exists yet). Then `python -m app.cli runs transition <run_id> DATA_PROFILED` and repeat step 3. **Expected:** HTTP 409 `SCOPE_LOCKED`.
+8. 🌐 **Connectors use the scope.** With the scope from step 3 (run this before step 7 if you want to keep the run in `CREATED`; the scope is stored either way), run `python -m app.manual_tests.t103_connectors_check <run_id>`. **Expected:** the Lakehouse's catalog name and its schema list (including `saleslt`), then `Connected successfully.` for the scope's SQL endpoint.
+9. 💻 **`.env` fallback still works.** `python -m app.tools.smoke --only lakehouse`. **Expected:** `PASS lakehouse` (scripts without a run still use the `.env` values).
+10. 💻 **Offline checks.** `python -m app.manual_tests.t103_offline_checks`. **Expected:** only `PASS` lines and `All checks passed.` (one logged "Fabric error" line is expected). This covers paging, 429 retries, 5xx, timeouts, the locking rules and the connector factories with a fake Fabric.
+11. 💻 **Clean up.** Stop uvicorn and delete the `runs\` folder.
+
+---
+
 ## M1 onward
 
-Sections for T-103 and later are added when each task is implemented.
+Sections for T-104 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -108,6 +126,8 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t002_check.py` | T-002 | One sign-in for the Lakehouse and SQL connectors |
 | `app/manual_tests/t101_offline_checks.py` | T-101 | Offline checks of the state table, file store and SQL store logic |
 | `app/manual_tests/t102_offline_checks.py` | T-102 | In-process checks of the API endpoints, error envelope and CORS |
+| `app/manual_tests/t103_offline_checks.py` | T-103 | Fake-Fabric checks of the Fabric client, scope binding and scope locking |
+| `app/manual_tests/t103_connectors_check.py` | T-103 | Live check that scope-based connectors reach the Lakehouse and its SQL endpoint |
 
 ## Adding a task
 

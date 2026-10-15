@@ -25,7 +25,12 @@ Persisted as `runs/<run_id>/RunManifest.json` (the spec's `RunManifest.json`, §
   "constraints": ["Use conformed tables only"],
   "state": "CREATED",
   "resume_state": null,
-  "scope": { "workspace_id": "…", "lakehouse_id": "…", "schemas": ["saleslt"] },
+  "scope": {
+    "workspace_id": "…", "workspace_name": "Sandbox",
+    "lakehouse_id": "…", "lakehouse_name": "SalesLakehouse",
+    "schemas": ["saleslt"],
+    "sql_endpoint": { "server": "….datawarehouse.fabric.microsoft.com", "database": "SalesLakehouse" }
+  },
   "created_by": { "oid": "…", "upn": "user@contoso.com", "name": "User Name" },
   "created_at": "…",
   "updated_at": "…",
@@ -40,6 +45,7 @@ Persisted as `runs/<run_id>/RunManifest.json` (the spec's `RunManifest.json`, §
 ```
 
 - `scope` and `created_by` are `null` until T-103 and T-105 set them.
+- `scope` also carries `workspace_name`, `lakehouse_name` and `sql_endpoint` (`null` when the Lakehouse has none yet), copied from Fabric when T-103 binds the scope. Connectors need them: the OneLake table API addresses a Lakehouse by name, and the SQL connector needs the endpoint. An empty `schemas` list means no restriction.
 - `resume_state` is set only while the state is `NEEDS_INPUT`. It records the state to return to.
 - Artifact `status` is one of `draft` | `approved` | `failed` | `stale` | `needs_input` | `data_gap`.
 - `based_on` maps the name of each upstream artifact to the hash it was built from. T-701 uses it.
