@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
-from app.contracts.business_contract import BusinessContract, ExpectedExample
+from app.contracts.business_contract import BusinessContract, ExpectedExample, Feasibility
 from app.workflow.approval import Action, ApprovalRecord
 from app.workflow.gates import GateResult
 from app.workflow.inventory_review import DataGap
@@ -91,6 +91,11 @@ class CompileResponse(BaseModel):
     run: RunDetail
     contract: BusinessContract
     blocking_questions: int
+
+
+class FeasibilityResponse(BaseModel):
+    kpis: list[Feasibility]
+    run: RunDetail
 
 
 class MeResponse(BaseModel):

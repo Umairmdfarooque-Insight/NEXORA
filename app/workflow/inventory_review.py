@@ -195,19 +195,34 @@ def raise_data_gap(
 ) -> Run:
     """Record a data gap and move the run to NEEDS_INPUT (it returns to its previous state
     when input is provided)."""
+    return raise_data_gaps(store, runs_root, run_id, [description], actor)
+
+
+def raise_data_gaps(
+    store: RunStore, runs_root: Path, run_id: str, descriptions: list[str], actor: str
+) -> Run:
+    """Record one or more data gaps and move the run to NEEDS_INPUT once."""
     run = store.get(run_id)
     if run.state not in GAP_STATES:
         raise WrongState("Raising a data gap", run.state, GAP_STATES)
-    gap = DataGap(
-        gap_id=str(uuid.uuid4()),
-        description=description,
-        raised_by=actor,
-        at=utc_now(),
-        from_state=run.state.value,
-    )
-    store.transition(run_id, RunState.NEEDS_INPUT, f"Data gap raised: {description[:200]}", actor)
+    lines = [
+        json.dumps(
+            DataGap(
+                gap_id=str(uuid.uuid4()),
+                description=description,
+                raised_by=actor,
+                at=utc_now(),
+                from_state=run.state.value,
+            ).model_dump(),
+            ensure_ascii=False,
+        )
+        + "\n"
+        for description in descriptions
+    ]
+    summary = descriptions[0] if len(descriptions) == 1 else f"{len(descriptions)} data gaps"
+    store.transition(run_id, RunState.NEEDS_INPUT, f"Data gap raised: {summary[:200]}", actor)
     path = Path(runs_root) / run_id / GAPS_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "ab") as handle:  # append only; bytes, so Windows keeps LF
-        handle.write((json.dumps(gap.model_dump(), ensure_ascii=False) + "\n").encode("utf-8"))
+        handle.write("".join(lines).encode("utf-8"))
     return store.get(run_id)

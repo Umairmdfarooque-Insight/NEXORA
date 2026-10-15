@@ -63,7 +63,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-303 | Relationship evidence | M3 | Done | task/T-303-relationship-evidence |
 | T-304 | Gate G2 and inventory UI | M3 | Done | task/T-304-gate-g2-inventory-ui |
 | T-401 | Entity-to-source mapping and conformed-table resolver | [M4 Planning](M4-planning.md) | Done | task/T-401-entity-source-mapping-conformed-resolver |
-| T-402 | KPI feasibility and Data Gap | M4 | Not started |  |
+| T-402 | KPI feasibility and Data Gap | M4 | Done | task/T-402-kpi-feasibility-and-data-gap |
 | T-403 | Bridge-table detection and proposal | M4 | Not started |  |
 | T-404 | ExecutionPlan and ModelSpec generation | M4 | Not started |  |
 | T-405 | Gate G3 and plan review UI | M4 | Not started |  |
