@@ -506,9 +506,25 @@ The table holds two literal rows, so no Lakehouse connection is needed. If Fabri
 
 ---
 
+### T-504 — Model validators and Gate G4
+
+**Before you start:** the T-503 setup (run A in `MODEL_GENERATING` with the measures added and `model\v2` generated), plus `SANDBOX_WORKSPACE_ID` in `.env`, the API's Entra app registration granted the Power BI delegated permission `Dataset.ReadWrite.All` with consent (otherwise `403 CONSENT_REQUIRED`), and SQL consent as before. Validation has no role gate, so `config\roles.yaml` needs no change.
+
+1. 🌐 **Passing model.** `POST /runs/{run_A}/model/validate` in Swagger. **Expected:** HTTP 200, `report.passed: true`, the run still `MODEL_GENERATING`. `runs\<run_A>\ValidationReport.json` has one run with `G4.REF`, one `G4.REL` per relationship, `G4.DAX` and `G4.RECON` per measure, and `G4.RLS` ("no roles defined" for a contract without security). The `G4.RECON` evidence for Net Revenue shows `dax_query`, `dax_value`, `sql_query` and `sql_value` side by side, plus a `slice` with its label and both values. The model `Nexora_<run>` exists in the sandbox workspace. Read the reference SQL and confirm it is a sensible independent calculation. A second call appends attempt 2 and reuses the saved SQL.
+2. 🌐 **Broken measure fails.** Open `runs\<run_A>\model\v2\definition\tables\<fact table>.tmdl` and change `Sales[LineTotal]` in the Net Revenue measure to `Sales[LineTotalX]`, then validate again (use a fresh run in `MODEL_GENERATING` if run A is `MODEL_FAILED`). **Expected:** `G4.REF` fails with "column 'LineTotalX' not found in table 'Sales'", `G4.DAX` fails with the engine's error (or `DEPLOY_FAILED` with Fabric's error), a `FILES_CHANGED` warning is present, and the run is `MODEL_FAILED`. The task's wording edits the ModelSpec and regenerates, but the ModelSpec is locked to its approved hash, so the deployed files are edited instead. To continue after a failure, run `python -m app.cli runs transition <run_A> MODEL_GENERATING` (the repair service of T-505 will do this).
+3. 🌐 **Invalid relationship.** Use a run whose plan has `nexora_test.dim_product_dupes` as the product dimension, with the Sales to Product relationship under an override: `PATCH /runs/{run}/plan` with `{"expected_hash": "<ExecutionPlan hash>", "ops": [{"op": "override_relationship", "name": "<the Sales to Product relationship>", "rationale": "Test of the duplicate-key check"}]}` (the conformed list and an approved exception must allow the dupes table). Accept the plan, generate the model and measures, then validate. **Expected:** `G4.REL` fails for that relationship with "N duplicate key value(s) on the 'one' side", `evidence.to_duplicate_keys` and the queries, and the run is `MODEL_FAILED`.
+4. 💻 **Report blocked.** `python -m app.cli runs transition <run_A> REPORT_GENERATING` while the run is `MODEL_FAILED`. **Expected:** `ILLEGAL_TRANSITION`. The `409 WRONG_STATE` from the report-planning endpoint arrives with T-601, which isn't built yet; the offline checks assert the state machine.
+5. 🌐 **Tolerance.** On a new run, before approving the contract, set a wrong example with `PUT /runs/{id}/contract/kpis/Net%20Revenue` and `{"expected_hash": "<contract hash>", "expected_examples": [{"description": "Total net revenue", "value": 1}]}`; take the run through plan, model, measures and validate. **Expected:** `G4.RECON` for Net Revenue fails, with `evidence.expected_example.value: 1`, `dax_value`, the difference and "differs from the business example 1" in the message.
+6. 💻 **Offline checks.** `python -m app.manual_tests.t504_offline_checks`. **Expected:** `All checks passed.` (the tolerance, the reference-SQL guard, the Power BI client, every G4 check passing and failing, skipped checks, the report and artifact, the move to `MODEL_FAILED`, replay of the saved SQL, and the 404/409/500 cases).
+7. 💻 **Clean up.** Delete the `Nexora_<run>` models from the sandbox workspace, restore any edited files, stop the API, and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1-3, 5), which need your Entra token and Power BI consent, the real model, the sandbox workspace and the Lakehouse. Claude ran steps 4 and 6 (offline).
+
+---
+
 ## Next tasks
 
-Sections for T-504 and later are added when each task is implemented.
+Sections for T-505 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -539,6 +555,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t501_offline_checks.py` | T-501 | Fake-Fabric checks of the deployment client, the sandbox guard and `cli deploy model` |
 | `app/manual_tests/t502_offline_checks.py` | T-502 | Checks of the TMDL generator, `model/generate` and `cli model generate` |
 | `app/manual_tests/t503_offline_checks.py` | T-503 | Fake-LLM checks of the DAX pre-check, the `dax_measure` graph and `model/measures` |
+| `app/manual_tests/t504_offline_checks.py` | T-504 | Fake-Fabric, Power BI, SQL and LLM checks of the G4 checks, the report and `model/validate` |
 
 ## Adding a task
 

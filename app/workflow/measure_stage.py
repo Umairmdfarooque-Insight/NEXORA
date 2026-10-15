@@ -11,7 +11,6 @@ The model's accepted answers are kept in `dax_suggestions.json`, keyed by a hash
 so unchanged inputs give the same DAX and no new version.
 """
 
-import json
 from pathlib import Path
 
 from app.contracts.model_plan import ModelSpec, load_yaml, save_yaml, to_data
@@ -26,8 +25,8 @@ from app.model.dax_generator import (
 from app.store.base import RunStore
 from app.workflow.clarification import NotFound, StaleVersion
 from app.workflow.compile_stage import WrongState, load_current_contract
-from app.workflow.harvest_stage import canonical_hash, write_json
-from app.workflow.llm_cache import request_key
+from app.workflow.harvest_stage import canonical_hash
+from app.workflow.llm_cache import CachedLlm, read_answers, write_answers
 from app.workflow.model_stage import TMDL_ARTIFACT, write_model_version
 from app.workflow.plan_stage import MODEL_ARTIFACT, MODEL_FILE
 from app.workflow.run import utc_now
@@ -35,32 +34,6 @@ from app.workflow.states import RunState
 
 MEASURE_STATES = (RunState.MODEL_GENERATING,)
 CACHE = "dax_suggestions.json"
-
-
-def _read_cache(run_dir: Path) -> dict[str, str]:
-    try:
-        data = json.loads((run_dir / CACHE).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    answers = data.get("answers") if isinstance(data, dict) else None
-    return {k: v for k, v in answers.items() if isinstance(v, str)} if isinstance(answers, dict) else {}
-
-
-class _CachedLlm:
-    """Replays a saved accepted answer for an identical request and remembers the last answer."""
-
-    def __init__(self, llm: LlmCall, cache: dict[str, str]):
-        self.llm, self.cache = llm, cache
-        self.last_key: str | None = None
-        self.last_raw: str | None = None
-
-    def __call__(self, system: str, user: str, schema: dict) -> str:
-        key = request_key(system, user)
-        raw = self.cache.get(key)
-        if raw is None:
-            raw = self.llm(system, user, schema)
-        self.last_key, self.last_raw = key, raw
-        return raw
 
 
 def add_measures(
@@ -84,7 +57,7 @@ def add_measures(
         raise StaleVersion(model_ref.hash, spec_hash, "model spec")
 
     kpis = {k.name.casefold(): k for k in contract.kpis}
-    cache = _read_cache(run_dir)
+    cache = read_answers(run_dir, CACHE)
     accepted_answers: dict[str, str] = {}
     results: list[dict] = []
     changed = False
@@ -93,7 +66,7 @@ def add_measures(
         if kpi is None:
             results.append({"name": measure.name, "dax": measure.dax, "status": "rejected", "reason": f"KPI {measure.kpi!r} is not in the approved contract"})
             continue
-        cached = _CachedLlm(llm, cache)
+        cached = CachedLlm(llm, cache)
         try:
             proposal = propose_measure_dax(kpi, spec, cached, measure.name)
         except DaxRejected as exc:
@@ -110,7 +83,7 @@ def add_measures(
         results.append({"name": measure.name, "dax": proposal.dax, "status": "accepted"})
 
     if accepted_answers:
-        write_json(run_dir / CACHE, {"answers": {**cache, **accepted_answers}})
+        write_answers(run_dir, CACHE, {**cache, **accepted_answers})
     if not changed:
         return results, tmdl_ref.version
 

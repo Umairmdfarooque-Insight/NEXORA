@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
+from app.contracts.validation_report import ValidationRun
 from app.contracts.business_contract import BusinessContract, ExpectedExample, Feasibility
 from app.contracts.model_plan import ExecutionPlan, ModelSpec
 from app.workflow.approval import Action, ApprovalRecord
@@ -109,6 +110,11 @@ class PlanResponse(BaseModel):
 class ModelGenerateResponse(BaseModel):
     version: int
     files: list[str]  # relative to runs/<id>/model/v<version>/
+    run: RunDetail
+
+
+class ModelValidateResponse(BaseModel):
+    report: ValidationRun  # this validation run's entry of ValidationReport.json
     run: RunDetail
 
 

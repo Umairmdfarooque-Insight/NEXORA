@@ -7,8 +7,11 @@ from fastapi import Depends
 
 from app.api.obo import get_msal_app, obo_token_provider
 from app.api.security import user_token
-from app.auth import FABRIC_SCOPE, SQL_SCOPE, STORAGE_SCOPE
+from app.auth import FABRIC_SCOPE, POWERBI_SCOPE, SQL_SCOPE, STORAGE_SCOPE
 from app.connectors.fabric_api import FabricApiClient
+from app.connectors.powerbi_api import PowerBiClient
+from app.deploy.fabric_items import FabricItemsClient
+from app.model.recon_sql import LlmCall as ReconLlm, default_recon_llm
 from app.compiler.requirement_compiler import LlmCall, default_llm
 from app.model.dax_generator import LlmCall as DaxLlm, default_dax_llm
 from app.discovery.relationship_candidates import RelationshipLlm, default_relationship_llm
@@ -52,6 +55,24 @@ def get_feasibility_llm() -> SourceLlm:
 
 def get_dax_llm() -> DaxLlm:
     return default_dax_llm()
+
+
+def get_recon_llm() -> ReconLlm:
+    return default_recon_llm()
+
+
+def get_items_client(
+    token: str = Depends(user_token), msal_app=Depends(get_msal_app)
+) -> FabricItemsClient:
+    """A Fabric items client (sandbox only) that deploys as the signed-in user (OBO)."""
+    return FabricItemsClient(token_provider=obo_token_provider(msal_app, token, FABRIC_SCOPE))
+
+
+def get_powerbi_client(
+    token: str = Depends(user_token), msal_app=Depends(get_msal_app)
+) -> PowerBiClient:
+    """A Power BI client that refreshes and queries as the signed-in user (OBO)."""
+    return PowerBiClient(token_provider=obo_token_provider(msal_app, token, POWERBI_SCOPE))
 
 
 def get_fabric_client(
