@@ -38,6 +38,7 @@ from app.workflow.approval import (
     UnknownArtifact,
     UnsupportedAction,
 )
+from app.workflow.bridge_stage import MappingRulesRequired
 from app.workflow.clarification import ContractLocked, NotFound, QuestionConflict, StaleVersion
 from app.workflow.compile_stage import WrongState
 from app.workflow.harvest_stage import ScopeMissing
@@ -183,6 +184,10 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"expected_hash": exc.expected, "current_hash": exc.current},
         )
+
+    @app.exception_handler(MappingRulesRequired)
+    async def mapping_rules_required(request: Request, exc: MappingRulesRequired):
+        return error_response(409, "MAPPING_RULES_REQUIRED", str(exc))
 
     @app.exception_handler(QuestionConflict)
     async def question_conflict(request: Request, exc: QuestionConflict):

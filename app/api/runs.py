@@ -68,6 +68,8 @@ from app.workflow.profile_stage import profile_run, summarize
 from app.workflow.relationship_stage import analyze_run, list_relationships
 from app.workflow.relationship_stage import summarize as summarize_relationships
 from app.contracts.source_resolution import SourceResolution
+from app.contracts.bridge_proposal import BridgeProposal
+from app.workflow.bridge_stage import propose_bridges
 from app.workflow.feasibility_stage import check_feasibility
 from app.workflow.scope import bind_scope
 from app.workflow.source_stage import resolve_sources
@@ -398,6 +400,18 @@ def plan_feasibility(
 ):
     report, run = check_feasibility(store, runs_root, run_id, llm, actor=user.upn)
     return FeasibilityResponse(kpis=report.kpis, run=detail(run, runs_root))
+
+
+@router.post("/{run_id}/plan/bridges", response_model=list[BridgeProposal])
+def plan_bridges(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    sql_connector_for_scope=Depends(get_sql_connector_factory),
+    user: Principal = Depends(current_user),
+):
+    proposals, _ = propose_bridges(store, runs_root, run_id, sql_connector_for_scope, actor=user.upn)
+    return proposals.proposals
 
 
 @router.get("/{run_id}/inventory", response_model=MetadataInventory, response_model_by_alias=True)

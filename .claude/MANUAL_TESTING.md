@@ -387,9 +387,26 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+### T-403 — Bridge-table detection and proposal
+
+**Before you start:** same setup as T-401 (token in Swagger, API running, SQL consent, `config\roles.yaml` with **your own UPN** in `bi_engineer`; restore it afterwards). The `nexora_test` fixtures must exist (`fixtures\README.md`), and `config\conformed_sources.yaml` lists `nexora_test.dim_promotion`, `bridge_product_promotion` and `dim_campaign`. Run A: contract entities `Sales`, `Product` and `Promotion` (a prompt such as "sales by promotion and product"), scope `saleslt` and `nexora_test`. Run B: entities `Product` and `Campaign`, the same scope. For each run: harvest, `POST /runs/{id}/profile`, `POST /runs/{id}/relationships/analyze`, Accept the inventory, then `POST /runs/{id}/plan/sources`.
+
+1. 🌐 **Existing mapping proposed.** `POST /runs/{run_A}/plan/bridges`. **Expected:** HTTP 200 with one proposal: `id: "B1"`, `entities: ["Product", "Promotion"]`, `situation: "existing_table"`, `table: "nexora_test.bridge_product_promotion"`, `status: "proposed"`, `evidence.duplicate_pairs: 0` and `coverage_a_pct` (Product, well under 100) and `coverage_b_pct: 100.0` (Promotion). `evidence.queries` shows the aggregate SQL. Compare in the SQL endpoint: `SELECT COUNT(DISTINCT p.ProductID) * 100.0 / (SELECT COUNT(DISTINCT ProductID) FROM saleslt.SalesLT_Product) FROM saleslt.SalesLT_Product p JOIN nexora_test.bridge_product_promotion b ON b.ProductID = p.ProductID`. The state is still `DATA_PROFILED`, and `runs\<run_A>\BridgeProposals.json` exists.
+2. 🌐 **No guess.** `POST /runs/{run_B}/plan/bridges`. **Expected:** one proposal with `situation: "needs_rules"`, `table: null`, `derivation_rule: null` and an issue "mapping rules required: …". The run state is `NEEDS_INPUT` and `GET /runs/{run_B}` shows a data gap "Mapping rules are required for Product and Campaign …". `dim_campaign` has no mapping table on purpose.
+3. 🌐 **Can't approve without rules.** `POST /runs/{run_B}/approvals` with `{"artifact": "BridgeProposal:B1", "action": "ACCEPT", "expected_hash": "<hash of BridgeProposals from GET /runs/{run_B}/artifacts>"}`. **Expected:** `409 MAPPING_RULES_REQUIRED` ("mapping rules required for Product and Campaign"); the proposal stays `proposed`.
+4. 🌐 **Approve a real bridge.** The same call on run A with `BridgeProposal:B1` (and, after a first try with a wrong hash, **Expected:** `409 STALE_VERSION`). **Expected:** HTTP 200, `runs\<run_A>\approvals.jsonl` ends with an `ACCEPT` record for `BridgeProposal:B1` with your UPN and role `bi_engineer`, the proposal's status is `approved` and `BridgeProposals` is version 2 with status `approved`. A second approval is `409 ALREADY_APPROVED`.
+5. 🌐 **Derivation rule.** Add to `config\derivation_rules.yaml`: `rules:` then `- id: DR1`, `entities: [Product, Campaign]`, `description: Campaign applies to the products of its category`, `approved_by: <you>` (restore it afterwards), and call `/plan/bridges` on a fresh run like B. **Expected:** `situation: "derivation_rule"`, `derivation_rule: "DR1"`, no table, and the state stays `DATA_PROFILED`.
+6. 🌐 **No false alarm.** On a run with entities `Sales`, `Product` and `Customer` (scope `saleslt`), call `/plan/bridges`. **Expected:** `[]` and the state unchanged.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t403_offline_checks`. **Expected:** `All checks passed.` (rule file errors, an existing mapping table with duplicates and coverage, several mapping tables, a derivation rule, a deduplication rule, `needs_rules` and `NEEDS_INPUT`, an isolated entity, a normal star with no proposals, a many-to-many nobody needs, approvals by both roles, the 403/404/409/422 cases, and 400/404/500 preconditions).
+8. 💻 **Clean up.** Restore `config\roles.yaml` and `config\derivation_rules.yaml` (`git checkout config/roles.yaml config/derivation_rules.yaml`), stop the API and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–6), which need your Entra token, SQL consent and the real Lakehouse with the `nexora_test` fixtures. Claude ran step 7.
+
+---
+
 ## Next tasks
 
-Sections for T-403 and later are added when each task is implemented.
+Sections for T-404 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -414,6 +431,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t304_offline_checks.py` | T-304 | Checks of Gate G2, exceptions, Accept of the inventory and data gaps |
 | `app/manual_tests/t401_offline_checks.py` | T-401 | Fake-LLM checks of the glossary, source scoring, the conformed policy and `plan/sources` |
 | `app/manual_tests/t402_offline_checks.py` | T-402 | Fake-LLM checks of KPI feasibility, data gaps and `plan/feasibility` |
+| `app/manual_tests/t403_offline_checks.py` | T-403 | Fake-SQL checks of bridge detection, mapping-table evidence, derivation rules, approvals and `plan/bridges` |
 
 ## Adding a task
 

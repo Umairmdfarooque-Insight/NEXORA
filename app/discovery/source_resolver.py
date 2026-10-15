@@ -8,7 +8,7 @@ types only, never data.
 
 Score (0 to 1): 0.4*name_match + 0.3*column_coverage + 0.2*conformed + 0.1*relationship_confidence
 - name_match: 1.0 if a glossary word is the table's name (a schema-wide prefix such as `SalesLT_`
-  ignored), 0.7 if it is a run of the words in the name, else 0 (a model-only suggestion).
+  and one leading qualifier such as `dim_` ignored), 0.7 if it is a run of the words in the name, else 0 (a model-only suggestion).
 - column_coverage: of the KPI needs that have a candidate column in one of the entity's candidate
   tables, the share this table can satisfy (1.0 when no need points at the entity).
 - conformed: 1 if the table is an approved conformed source, else 0.
@@ -248,7 +248,9 @@ def name_match(aliases: list[str], table, prefixes: dict[str, str]) -> tuple[flo
     parts = _parts(table.table_name)
     if len(parts) > 1 and parts[0].lower() == prefixes.get(table.schema_name.lower()):
         parts = parts[1:]
-    exact = {f for i in range(len(parts)) for f in forms(normalize("".join(parts[i:])))}
+    # The whole name, or the name without one leading qualifier (`dim_`, `SalesLT_`). Dropping
+    # more would let `bridge_product_promotion` count as being named `promotion`.
+    exact = {f for i in range(min(2, len(parts))) for f in forms(normalize("".join(parts[i:])))}
     words = [w.lower() for p in parts for w in (_WORDS.findall(p) or [p])]
     runs = {
         f
