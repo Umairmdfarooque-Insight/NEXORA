@@ -475,9 +475,25 @@ The table holds two literal rows, so no Lakehouse connection is needed. If Fabri
 
 ---
 
+### T-502 — TMDL generator
+
+**Before you start:** you need a run in `PLAN_APPROVED`, so the setup is the same as T-405 (API running with `uvicorn app.api.main:app --reload --port 8000`, token in Swagger, your UPN under `bi_engineer` in `config\roles.yaml`, restored afterwards). Use run A of T-404/T-405 (scope `saleslt` and `nexora_test`, plan generated and accepted). Its Lakehouse must have a SQL endpoint. `SANDBOX_WORKSPACE_ID` must be set for step 3.
+
+1. 🌐 **Generated.** `POST /runs/{run_A}/model/generate` in Swagger. **Expected:** HTTP 200 with `version: 1`, `files` and `run.state: MODEL_GENERATING`. `runs\<run_A>\model\v1\` has `definition.pbism` and `definition\` with `database.tmdl`, `model.tmdl`, `relationships.tmdl`, `expressions.tmdl` and one file under `tables\` per ModelSpec table. `GET /runs/{run_A}/artifacts` lists `TMDLModel` (version 1, draft). A second call is `409 WRONG_STATE`.
+2. 🌐 **Deterministic.** `python -m app.cli model generate runs\<run_A>`, then `git diff --no-index runs\<run_A>\model\v1 runs\<run_A>\model\v2`. **Expected:** the command prints `v2: <n> files in ...` and `git diff` prints nothing. The run state is still `MODEL_GENERATING`.
+3. 🌐 **Deployable.** `python -m app.cli deploy model runs\<run_A>\model\v1 --name Nexora_<run>` (use the first 8 characters of the run id). **Expected:** `operation: created`. In the web model view of the sandbox workspace the tables, the relationships (many-to-one, single direction, unless the ModelSpec says otherwise) and the Calendar hierarchy of the date table are visible. Measures show only after T-503 (their `dax` is still null). If Fabric rejects the files, Fabric's error is printed: report it with the file, because the generator is what to fix.
+4. 🌐 **No LLM.** In `.env` set `AZURE_OPENAI_ENDPOINT` to `https://invalid.invalid` (restore it afterwards) and run `python -m app.cli model generate runs\<run_A>`. **Expected:** it still prints `v3: ...`, because the generator never calls the model.
+5. 🌐 **Edited spec refused.** Add a blank line at the end of `runs\<run_A>\ModelSpec.yaml` and change a table name in it, then run `python -m app.cli model generate runs\<run_A>`. **Expected:** `The model spec changed since you loaded it...` (the file no longer matches the approved hash), exit code 1, and no new `v` folder. Undo the edit by hand, or reject the plan and regenerate it. A spec that fails a PLAN check is refused with `INVALID` and the failing path, which the offline checks cover.
+6. 💻 **Offline checks.** `python -m app.manual_tests.t502_offline_checks`. **Expected:** `All checks passed.` (the file layout, quoting, tabs and LF, Direct Lake and Import partitions, the hierarchy, relationships, null DAX left out, byte-identical output in any object order, refusals that write nothing, the endpoint with its 404/409/400/422 cases, `MODEL_FAILED` for repair, and the CLI).
+7. 💻 **Clean up.** Delete the model from the sandbox workspace, restore `config\roles.yaml` and `.env`, stop the API, and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–5), which need your Entra token, the real run and the sandbox workspace. Claude ran step 6.
+
+---
+
 ## Next tasks
 
-Sections for T-502 and later are added when each task is implemented.
+Sections for T-503 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -506,6 +522,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t404_offline_checks.py` | T-404 | Checks of ModelSpec and ExecutionPlan generation, plan validation, the `plan` endpoints and `cli plan validate` |
 | `app/manual_tests/t405_offline_checks.py` | T-405 | Checks of Gate G3, plan edits, Accept and Reject of the ExecutionPlan |
 | `app/manual_tests/t501_offline_checks.py` | T-501 | Fake-Fabric checks of the deployment client, the sandbox guard and `cli deploy model` |
+| `app/manual_tests/t502_offline_checks.py` | T-502 | Checks of the TMDL generator, `model/generate` and `cli model generate` |
 
 ## Adding a task
 

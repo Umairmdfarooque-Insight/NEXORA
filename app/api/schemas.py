@@ -106,6 +106,12 @@ class PlanResponse(BaseModel):
     validation: GateResult
 
 
+class ModelGenerateResponse(BaseModel):
+    version: int
+    files: list[str]  # relative to runs/<id>/model/v<version>/
+    run: RunDetail
+
+
 class PlanEditRequest(BaseModel):
     expected_hash: str
     ops: Annotated[list[PlanOp], Field(min_length=1, max_length=50)]

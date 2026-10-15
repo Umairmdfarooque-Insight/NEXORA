@@ -33,7 +33,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | Backend runtime | **Decided: Python FastAPI** (matches the existing `app/` code) | T-102 |
 | Orchestration | **Decided: hybrid.** An explicit state machine with `RunStore` owns run state, approvals and audit. LangGraph stage graphs run the LLM loops inside a stage. See [CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs). | T-101 (state machine), T-202 (first stage graph) |
 | Control store | **Decided: both.** Local file store under `runs/<run_id>/` is the default (`RUN_STORE=file`). A Fabric SQL Database store (`RUN_STORE=fabric_sql`, settings `FABRIC_CONTROL_DB_SERVER` and `FABRIC_CONTROL_DB_NAME`) sits behind the same `RunStore` interface. | T-101 |
-| Model authoring route | Canonical TMDL files generated deterministically; MCP optional later | T-502 |
+| Model authoring route | **Decided: canonical TMDL files generated deterministically (T-502), plus an optional MCP writer behind the same interface.** The MCP server and its tools are not chosen yet, so the writer isn't built. | T-502 |
 | Report authoring route | Deterministic PBIR generator | T-602 |
 | Sandbox topology | **Decided: one dedicated sandbox workspace per environment** (`SANDBOX_WORKSPACE_ID`) | T-501 |
 | Approval roles | **Decided: spec roles in a committed `config/roles.yaml`** (real UPNs in the public repo, one person may hold several roles during development) | T-204 |
@@ -68,7 +68,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-404 | ExecutionPlan and ModelSpec generation | M4 | Done | task/T-404-executionplan-modelspec-generation |
 | T-405 | Gate G3 and plan review UI | M4 | Done | task/T-405-gate-g3-plan-review-ui |
 | T-501 | Sandbox deployment client | [M5 Semantic model](M5-semantic-model.md) | Done | task/T-501-sandbox-deployment-client |
-| T-502 | TMDL generator | M5 | Not started |  |
+| T-502 | TMDL generator | M5 | Done | task/T-502-tmdl-generator |
 | T-503 | DAX measure generation | M5 | Not started |  |
 | T-504 | Model validators and Gate G4 | M5 | Not started |  |
 | T-505 | Validation and Repair service | M5 | Not started |  |

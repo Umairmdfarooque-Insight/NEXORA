@@ -1,4 +1,4 @@
-"""Nexora command line. Usage: python -m app.cli runs|contract|plan|deploy <command> ..."""
+"""Nexora command line. Usage: python -m app.cli runs|contract|plan|model|deploy <command> ..."""
 
 import argparse
 import json
@@ -61,6 +61,11 @@ def _build_parser() -> argparse.ArgumentParser:
     deploy_model.add_argument("tmdl_dir")
     deploy_model.add_argument("--name", required=True, help="Display name of the semantic model")
     deploy_model.add_argument("--workspace-id", help="Target workspace (default: SANDBOX_WORKSPACE_ID); anything but the sandbox is refused")
+
+    model = groups.add_parser("model", help="Generate a run's semantic model files")
+    model_cmds = model.add_subparsers(dest="command", required=True)
+    model_generate = model_cmds.add_parser("generate", help="Write the next TMDL version of a run folder (runs/<run_id>)")
+    model_generate.add_argument("path")
     return parser
 
 
@@ -151,6 +156,35 @@ def _plan_command(args) -> int:
     return 0
 
 
+def _model_command(args) -> int:
+    from pathlib import Path
+
+    from app.model.tmdl_generator import ModelGenerationError
+    from app.workflow.clarification import NotFound, StaleVersion
+    from app.workflow.harvest_stage import ScopeMissing
+    from app.workflow.model_stage import ModelSpecInvalid, write_model_version
+
+    folder = Path(args.path)
+    if not folder.is_dir():
+        print(f"Run folder not found: {folder}", file=sys.stderr)
+        return 2
+    try:
+        version, files = write_model_version(get_run_store(), folder.resolve().parent, folder.name)
+    except ModelSpecInvalid as exc:
+        print("INVALID")
+        for check in exc.failed:
+            for path in check.evidence.get("paths", [check.description]):
+                print(f"  {check.id}: {path}")
+        return 1
+    except (NotFound, StaleVersion, ScopeMissing, ModelGenerationError, RunNotFound) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(f"v{version}: {len(files)} files in {folder / 'model' / f'v{version}'}")
+    for name in files:
+        print(f"  {name}")
+    return 0
+
+
 def _deploy_command(args) -> int:
     from pathlib import Path
 
@@ -236,6 +270,8 @@ def main(argv: list[str] | None = None) -> int:
         return _plan_command(args)
     if args.group == "deploy":
         return _deploy_command(args)
+    if args.group == "model":
+        return _model_command(args)
     try:
         return _run_command(args)
     except ValueError as exc:  # bad prompt, bad state name, bad RUN_STORE
