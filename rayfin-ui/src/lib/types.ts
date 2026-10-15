@@ -42,8 +42,16 @@ export interface RunDetail {
   updated_at: string;
   history: HistoryEntry[];
   next_action: string;
-  open_questions: unknown[];
+  open_questions: OpenQuestion[];
   warnings: string[];
+}
+
+export interface OpenQuestion {
+  id: string;
+  text: string;
+  blocking: boolean;
+  reason: string | null;
+  source: string;
 }
 
 export interface RunSummary {

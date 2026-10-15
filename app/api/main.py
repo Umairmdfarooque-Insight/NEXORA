@@ -1,9 +1,11 @@
 """Nexora orchestration API. Start: uvicorn app.api.main:app --reload --port 8000
 
-No authentication yet (T-105), so run it locally only.
+Every endpoint except /health needs an Entra bearer token (T-105).
 """
 
+import logging
 import subprocess
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import fabric, runs
 from app.api.errors import register_error_handlers
 from app.api.schemas import Health
+from app.compiler.critical_terms import load_critical_terms
 from app.config import APP_NAME, PROJECT_ROOT
 
 RAYFIN_ORIGIN = "http://localhost:3000"
@@ -33,7 +36,23 @@ def _version() -> str:
 
 VERSION = _version()
 
-app = FastAPI(title=f"{APP_NAME} API", version=VERSION)
+# Stage graphs log their node path at INFO. Only the app's own loggers are switched on, so
+# third-party libraries stay quiet.
+_app_logger = logging.getLogger("app")
+_app_logger.setLevel(logging.INFO)
+if not _app_logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
+    _app_logger.addHandler(_handler)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    load_critical_terms()  # a missing or invalid config/critical_terms.yaml stops the API here
+    yield
+
+
+app = FastAPI(title=f"{APP_NAME} API", version=VERSION, lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[RAYFIN_ORIGIN],

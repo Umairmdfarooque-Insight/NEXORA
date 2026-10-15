@@ -132,6 +132,14 @@ A plain-English prompt must become a draft BusinessContract. Today the LLM may s
 - Compiling is allowed only in `CREATED` and `NEEDS_CLARIFICATION`.
 - The deterministic rule runs **after** the LLM, so it can't be skipped. In the graph, `apply_critical_terms` and `apply_locked_facts` sit on every path to the end.
 - The retry is the graph's loop. The `validate_schema → llm_compile` edge allows at most 2 LLM attempts in total.
+- Implementation notes:
+  - The LLM schema is T-201's schema pruned to the fields the LLM may fill (no `run_id`, `version`, `status`, `locked_facts`, `feasibility`, and no KPI `status` or question `id`, `source`, `status`, `answer`) and made strict (every property required, no extra properties). Code sets those fields: the draft `status`, the run id, the version (previous version + 1), question `source: llm`, and `domain` (the run's subject area, else `Sales`).
+  - If both LLM attempts are invalid the graph ends after `validate_schema` with no contract, so the "ends in `apply_locked_facts`" rule applies to every path that produces a contract. The failure is then reported as `502 LLM_INVALID_OUTPUT`.
+  - Rule question ids are stable: `RULE-<TERM>` (for example `RULE-REVENUE`) and `RULE-METRIC`; LLM questions are numbered `Q1`, `Q2`, … A rule question that was answered in the previous contract (or has a locked fact) is not raised again.
+  - An LLM question that mentions a term a rule question already covers is dropped as a duplicate. Entities and dimensions get a capital first letter and are de-duplicated ignoring case, so wording differences between runs don't change the structure (NFR-009).
+  - Compiling a run in `CREATED` that still has no blocking question adds no history entry; the state only changes when the outcome differs from the current state.
+  - Contract files live in `runs/<id>/` for both run stores (only the manifest is in the Fabric SQL store). `GET /runs/{id}` now fills `open_questions` with the open questions of the current contract (objects with `id`, `text`, `blocking`, `reason`, `source`).
+  - The API logs the node path at INFO (`stage=compile run_id=… node_path=llm_compile -> … -> apply_locked_facts`), and a bad `config/critical_terms.yaml` stops the API at startup with a message naming the file.
 
 #### Edge cases and error handling
 | Case | Expected behavior |

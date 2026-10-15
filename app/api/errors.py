@@ -24,6 +24,14 @@ from app.store.base import (
     StoreUnavailable,
 )
 
+from app.compiler.critical_terms import ConfigError
+from app.llm.errors import (
+    LlmInvalidOutput,
+    LlmTimeout,
+    LlmUpstreamError,
+    PromptRejected,
+)
+from app.workflow.compile_stage import WrongState
 from app.workflow.scope import SchemaNotFound, ScopeLocked
 
 logger = logging.getLogger(__name__)
@@ -106,6 +114,41 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(OboFailed)
     async def obo_failed(request: Request, exc: OboFailed):
         return error_response(502, "UPSTREAM_ERROR", str(exc))
+
+    @app.exception_handler(WrongState)
+    async def wrong_state(request: Request, exc: WrongState):
+        return error_response(
+            409,
+            "WRONG_STATE",
+            str(exc),
+            {"state": exc.state.value, "allowed": [s.value for s in exc.allowed]},
+        )
+
+    @app.exception_handler(LlmInvalidOutput)
+    async def llm_invalid_output(request: Request, exc: LlmInvalidOutput):
+        return error_response(
+            502,
+            "LLM_INVALID_OUTPUT",
+            "The model returned an unusable answer. The raw output was saved in the run's logs folder. Try again.",
+        )
+
+    @app.exception_handler(LlmTimeout)
+    async def llm_timeout(request: Request, exc: LlmTimeout):
+        return error_response(504, "UPSTREAM_TIMEOUT", str(exc))
+
+    @app.exception_handler(PromptRejected)
+    async def prompt_rejected(request: Request, exc: PromptRejected):
+        return error_response(422, "PROMPT_REJECTED", str(exc))
+
+    @app.exception_handler(LlmUpstreamError)
+    async def llm_upstream(request: Request, exc: LlmUpstreamError):
+        logger.error("LLM error: %s", exc)
+        return error_response(502, "UPSTREAM_ERROR", str(exc))
+
+    @app.exception_handler(ConfigError)
+    async def config_error(request: Request, exc: ConfigError):
+        logger.error("%s", exc)
+        return error_response(500, "CONFIG_ERROR", str(exc))
 
     @app.exception_handler(ScopeLocked)
     async def scope_locked(request: Request, exc: ScopeLocked):

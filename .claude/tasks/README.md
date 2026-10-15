@@ -37,7 +37,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | Report authoring route | Deterministic PBIR generator | T-602 |
 | Sandbox topology | One dedicated sandbox workspace per environment | T-501 |
 | Approval roles | Roles from [product-definition.md](../spec/product-definition.md#users-and-responsibilities); one person may hold several roles during development | T-204 |
-| Initial domain | Sales (the existing `saleslt` data) | T-202 |
+| Initial domain | **Decided: Sales** (the existing `saleslt` data) | T-202 |
 | Retry limits | 3 attempts per artifact section | T-505 |
 
 ## Task index
@@ -54,7 +54,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-104 | Rayfin UI shell | M1 | Done | task/T-104-rayfin-ui-shell |
 | T-105 | Entra authentication | M1 | Done | task/T-105-entra-authentication |
 | T-201 | BusinessContract schema | [M2 Requirement control](M2-requirement-control.md) | Done | task/T-201-businesscontract-schema |
-| T-202 | Requirement Compiler with ambiguity detection | M2 | Not started |  |
+| T-202 | Requirement Compiler with ambiguity detection | M2 | Done | task/T-202-requirement-compiler-ambiguity-detection |
 | T-203 | Clarification loop | M2 | Not started |  |
 | T-204 | Approval service and Gate G1 | M2 | Not started |  |
 | T-205 | Clarification and contract review UI | M2 | Not started |  |
