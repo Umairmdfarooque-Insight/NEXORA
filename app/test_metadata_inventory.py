@@ -1,4 +1,6 @@
 
+import sys
+
 from app.connectors.fabric_lakehouse import FabricLakehouseConnector
 from app.discovery.metadata_inventory import build_metadata_inventory
 
@@ -6,8 +8,8 @@ from app.discovery.metadata_inventory import build_metadata_inventory
 def main():
     connector = FabricLakehouseConnector()
 
-    # Start with the schema we have already tested
-    schema_name = "saleslt"
+    # Defaults to the schema we have already tested; pass another as the first argument
+    schema_name = sys.argv[1] if len(sys.argv) > 1 else "saleslt"
 
     try:
         inventory = build_metadata_inventory(

@@ -80,6 +80,7 @@ Every later step for this task (implementing, verifying, status updates) stays o
 
 - Set the task's status to `Awaiting manual test`.
 - If commands, setup or architecture changed, update `.claude/CLAUDE.md`.
+- Add or refresh the task's section in `.claude/MANUAL_TESTING.md` with its manual-test steps (exact commands and **Expected** results), following "Adding a task" in that file. Any script the manual test needs goes in `app/manual_tests/` and is committed, never left as a scratch or root-level file.
 - Don't commit or push unless the user asks.
 - Reply with:
   1. **What was built:** the branch name, files changed, and any decision made.
