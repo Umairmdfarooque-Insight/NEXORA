@@ -1,4 +1,4 @@
-"""Nexora command line. Usage: python -m app.cli runs|contract <command> ..."""
+"""Nexora command line. Usage: python -m app.cli runs|contract|plan|deploy <command> ..."""
 
 import argparse
 import json
@@ -54,6 +54,13 @@ def _build_parser() -> argparse.ArgumentParser:
     plan_cmds = plan.add_subparsers(dest="command", required=True)
     plan_validate = plan_cmds.add_parser("validate", help="Check the plan files in a run folder (runs/<run_id>)")
     plan_validate.add_argument("path")
+
+    deploy = groups.add_parser("deploy", help="Deploy generated artifacts to the sandbox workspace")
+    deploy_cmds = deploy.add_subparsers(dest="command", required=True)
+    deploy_model = deploy_cmds.add_parser("model", help="Create or update a semantic model from a TMDL folder")
+    deploy_model.add_argument("tmdl_dir")
+    deploy_model.add_argument("--name", required=True, help="Display name of the semantic model")
+    deploy_model.add_argument("--workspace-id", help="Target workspace (default: SANDBOX_WORKSPACE_ID); anything but the sandbox is refused")
     return parser
 
 
@@ -144,6 +151,50 @@ def _plan_command(args) -> int:
     return 0
 
 
+def _deploy_command(args) -> int:
+    from pathlib import Path
+
+    from app.compiler.critical_terms import ConfigError
+    from app.connectors.fabric_api import FabricError
+    from app.deploy.fabric_items import (
+        FabricItemsClient,
+        FabricOperationFailed,
+        InvalidDefinition,
+        NameConflict,
+        TargetNotAllowed,
+        get_sandbox_workspace_id,
+    )
+
+    workspace_id = args.workspace_id or get_sandbox_workspace_id()
+    if not workspace_id:
+        print("SANDBOX_WORKSPACE_ID is not set. Check your .env file.", file=sys.stderr)
+        return 2
+    try:
+        result = FabricItemsClient().upsert_semantic_model(workspace_id, args.name, Path(args.tmdl_dir))
+    except InvalidDefinition as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    except ConfigError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+    except TargetNotAllowed as exc:
+        print(f"TARGET_NOT_ALLOWED: {exc}", file=sys.stderr)
+        return 1
+    except NameConflict as exc:
+        print(f"NAME_CONFLICT: {exc}", file=sys.stderr)
+        return 1
+    except FabricError as exc:
+        print(f"UPSTREAM_ERROR: {exc}", file=sys.stderr)
+        if exc.request_id:
+            print(f"Fabric request ID: {exc.request_id}", file=sys.stderr)
+        if isinstance(exc, FabricOperationFailed) and exc.details:
+            print(json.dumps(exc.details, indent=2), file=sys.stderr)
+        return 1
+    print(f"item_id: {result['item_id']}")
+    print(f"operation: {result['operation']}")
+    return 0
+
+
 def _run_command(args) -> int:
     # Validate arguments before touching the store.
     if args.command == "list" and args.state:
@@ -183,6 +234,8 @@ def main(argv: list[str] | None = None) -> int:
         return _contract_command(args)
     if args.group == "plan":
         return _plan_command(args)
+    if args.group == "deploy":
+        return _deploy_command(args)
     try:
         return _run_command(args)
     except ValueError as exc:  # bad prompt, bad state name, bad RUN_STORE

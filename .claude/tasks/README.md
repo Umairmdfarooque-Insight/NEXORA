@@ -35,7 +35,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | Control store | **Decided: both.** Local file store under `runs/<run_id>/` is the default (`RUN_STORE=file`). A Fabric SQL Database store (`RUN_STORE=fabric_sql`, settings `FABRIC_CONTROL_DB_SERVER` and `FABRIC_CONTROL_DB_NAME`) sits behind the same `RunStore` interface. | T-101 |
 | Model authoring route | Canonical TMDL files generated deterministically; MCP optional later | T-502 |
 | Report authoring route | Deterministic PBIR generator | T-602 |
-| Sandbox topology | One dedicated sandbox workspace per environment | T-501 |
+| Sandbox topology | **Decided: one dedicated sandbox workspace per environment** (`SANDBOX_WORKSPACE_ID`) | T-501 |
 | Approval roles | **Decided: spec roles in a committed `config/roles.yaml`** (real UPNs in the public repo, one person may hold several roles during development) | T-204 |
 | Initial domain | **Decided: Sales** (the existing `saleslt` data) | T-202 |
 | Retry limits | 3 attempts per artifact section | T-505 |
@@ -67,7 +67,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-403 | Bridge-table detection and proposal | M4 | Done | task/T-403-bridge-table-detection-proposal |
 | T-404 | ExecutionPlan and ModelSpec generation | M4 | Done | task/T-404-executionplan-modelspec-generation |
 | T-405 | Gate G3 and plan review UI | M4 | Done | task/T-405-gate-g3-plan-review-ui |
-| T-501 | Sandbox deployment client | [M5 Semantic model](M5-semantic-model.md) | Not started |  |
+| T-501 | Sandbox deployment client | [M5 Semantic model](M5-semantic-model.md) | Done | task/T-501-sandbox-deployment-client |
 | T-502 | TMDL generator | M5 | Not started |  |
 | T-503 | DAX measure generation | M5 | Not started |  |
 | T-504 | Model validators and Gate G4 | M5 | Not started |  |

@@ -38,6 +38,7 @@ from app.workflow.approval import (
     UnknownArtifact,
     UnsupportedAction,
 )
+from app.deploy.fabric_items import FabricOperationFailed, NameConflict, TargetNotAllowed
 from app.discovery.model_planner import NoFeasibleKpis
 from app.workflow.bridge_stage import MappingRulesRequired
 from app.workflow.clarification import ContractLocked, NotFound, QuestionConflict, StaleVersion
@@ -240,6 +241,21 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(SchemaNotFound)
     async def schema_not_found(request: Request, exc: SchemaNotFound):
         return error_response(404, "SCHEMA_NOT_FOUND", str(exc), {"schema": exc.schema})
+
+    @app.exception_handler(TargetNotAllowed)
+    async def target_not_allowed(request: Request, exc: TargetNotAllowed):
+        return error_response(403, "TARGET_NOT_ALLOWED", str(exc))
+
+    @app.exception_handler(NameConflict)
+    async def name_conflict(request: Request, exc: NameConflict):
+        return error_response(409, "NAME_CONFLICT", str(exc), {"item_type": exc.item_type})
+
+    @app.exception_handler(FabricOperationFailed)
+    async def fabric_operation_failed(request: Request, exc: FabricOperationFailed):
+        suffix = f" (Fabric request ID: {exc.request_id})" if exc.request_id else ""
+        return error_response(
+            502, "UPSTREAM_ERROR", f"{exc}{suffix}", _fabric_details(exc) | {"fabric_error": exc.details}
+        )
 
     @app.exception_handler(FabricForbidden)
     async def fabric_forbidden(request: Request, exc: FabricForbidden):
