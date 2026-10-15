@@ -224,6 +224,33 @@ class ProfileResponse(BaseModel):
     errors: int
 
 
+class ColumnRefBody(BaseModel):
+    table: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    column: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+
+class RelationshipCandidateBody(BaseModel):
+    """A join named by the user. It is measured like any other candidate."""
+
+    from_: ColumnRefBody = Field(alias="from")
+    to: ColumnRefBody
+
+    model_config = {"populate_by_name": True}
+
+
+class AnalyzeRelationshipsRequest(BaseModel):
+    candidates: list[RelationshipCandidateBody] = Field(default_factory=list, max_length=50)
+
+
+class AnalyzeRelationshipsResponse(BaseModel):
+    candidates: int
+    high: int
+    medium: int
+    low: int
+    rejected: int
+    warnings: list[str] = Field(default_factory=list)
+
+
 class Health(BaseModel):
     status: str
     app: str

@@ -60,7 +60,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-205 | Clarification and contract review UI | M2 | Done | task/T-205-clarification-contract-review-ui |
 | T-301 | Metadata Harvester per run | [M3 Data understanding](M3-data-understanding.md) | Done | task/T-301-metadata-harvester-per-run |
 | T-302 | Generic data profiler | M3 | Done | task/T-302-generic-data-profiler |
-| T-303 | Relationship evidence | M3 | Not started |  |
+| T-303 | Relationship evidence | M3 | Done | task/T-303-relationship-evidence |
 | T-304 | Gate G2 and inventory UI | M3 | Not started |  |
 | T-401 | Entity-to-source mapping and conformed-table resolver | [M4 Planning](M4-planning.md) | Not started |  |
 | T-402 | KPI feasibility and Data Gap | M4 | Not started |  |

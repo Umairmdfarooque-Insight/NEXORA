@@ -60,6 +60,38 @@ class TableProfile(BaseModel):
     evidence: ProfileEvidence
 
 
+class ColumnRef(BaseModel):
+    table: str  # "schema.table"
+    column: str
+
+
+class RelationshipQueryEvidence(BaseModel):
+    queries: list[str] = Field(default_factory=list)
+    computed_at: str
+
+
+class RelationshipEvidence(BaseModel):
+    """A candidate join with measured evidence (T-303). Percentages are 0-100."""
+
+    id: str
+    from_: ColumnRef = Field(alias="from")
+    to: ColumnRef
+    source: Literal["heuristic", "llm", "user"]
+    type_compatible: bool | None = None
+    overlap_pct: float | None = None  # % of distinct non-null source values found in the target
+    orphan_rate: float | None = None  # % of non-null source rows with no match in the target
+    null_rate: float | None = None  # % of source rows whose key is null
+    cardinality: Literal["one_to_one", "many_to_one", "many_to_many"] | None = None
+    confidence: Literal["high", "medium", "low"] | None = None
+    thresholds: dict[str, Any] | None = None
+    evidence: RelationshipQueryEvidence
+    status: Literal["candidate", "rejected"] = "candidate"
+    rejected_reason: str | None = None
+    notes: list[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
 class InventoryTable(BaseModel):
     schema_name: str = Field(alias="schema")
     table_name: str
@@ -84,7 +116,7 @@ class MetadataInventory(BaseModel):
     harvested_at: str
     scope: InventoryScope
     tables: list[InventoryTable] = Field(default_factory=list)
-    relationship_evidence: list[dict[str, Any]] = Field(default_factory=list)  # filled by T-303
+    relationship_evidence: list[RelationshipEvidence] = Field(default_factory=list)  # filled by T-303
     errors: list[InventoryRunError] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
