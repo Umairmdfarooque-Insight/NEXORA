@@ -222,6 +222,7 @@ Saved as `runs/<run_id>/ValidationReport.json` (spec §10). Each new validation 
 }
 ```
 
+- `status` is `pass` | `fail` | `warning` | `skipped` (T-504: a check that needs the deployed model is `skipped` when deployment or refresh failed).
 - `severity` is `error` | `warning` | `info`.
 - `classification` is `deterministic` | `llm` | `user_input`. T-505 sets it.
 

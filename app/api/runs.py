@@ -7,6 +7,9 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import (
     get_connector_factory,
     get_dax_llm,
+    get_items_client,
+    get_powerbi_client,
+    get_recon_llm,
     get_fabric_client,
     get_feasibility_llm,
     get_llm,
@@ -36,6 +39,7 @@ from app.api.schemas import (
     KpiEditRequest,
     MeasuresResponse,
     ModelGenerateResponse,
+    ModelValidateResponse,
     KpiEditResponse,
     ProfileRequest,
     PlanEditRequest,
@@ -79,7 +83,11 @@ from app.workflow.bridge_stage import propose_bridges
 from app.workflow.feasibility_stage import check_feasibility
 from app.model.dax_generator import LlmCall as DaxLlm
 from app.workflow.measure_stage import add_measures
+from app.connectors.powerbi_api import PowerBiClient
+from app.deploy.fabric_items import FabricItemsClient
+from app.model.recon_sql import LlmCall as ReconLlm
 from app.workflow.model_stage import generate_model
+from app.workflow.validate_stage import validate_model
 from app.workflow.plan_review import check_g3, edit_plan
 from app.workflow.plan_stage import generate_plan, read_plan
 from app.workflow.source_stage import load_saved_resolution
@@ -468,6 +476,25 @@ def model_measures(
 ):
     measures, version = add_measures(store, runs_root, run_id, llm)
     return MeasuresResponse(measures=measures, version=version)
+
+
+@router.post("/{run_id}/model/validate", response_model=ModelValidateResponse)
+def model_validate(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    items: FabricItemsClient = Depends(get_items_client),
+    pbi: PowerBiClient = Depends(get_powerbi_client),
+    sql_factory=Depends(get_sql_connector_factory),
+    llm: ReconLlm = Depends(get_recon_llm),
+    user: Principal = Depends(current_user),
+):
+    entry, run = validate_model(
+        store, runs_root, run_id,
+        items_client=items, pbi=pbi, sql_connector_factory=sql_factory, recon_llm=llm,
+        user_upn=user.upn, actor=user.upn,
+    )
+    return ModelValidateResponse(report=entry, run=detail(run, runs_root))
 
 
 @router.patch("/{run_id}/plan", response_model=PlanEditResponse, response_model_by_alias=True)

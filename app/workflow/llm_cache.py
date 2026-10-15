@@ -27,3 +27,34 @@ def saved_answer(run_dir: Path, name: str, key: str) -> str | None:
 
 def save_answer(run_dir: Path, name: str, key: str, response: str) -> None:
     write_json(Path(run_dir) / name, {"key": key, "response": response})
+
+
+def read_answers(run_dir: Path, name: str) -> dict[str, str]:
+    """Every saved answer of a stage that keeps several (one per request), keyed by request."""
+    try:
+        data = json.loads((Path(run_dir) / name).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    answers = data.get("answers") if isinstance(data, dict) else None
+    return {k: v for k, v in answers.items() if isinstance(v, str)} if isinstance(answers, dict) else {}
+
+
+def write_answers(run_dir: Path, name: str, answers: dict[str, str]) -> None:
+    write_json(Path(run_dir) / name, {"answers": answers})
+
+
+class CachedLlm:
+    """Replays a saved accepted answer for an identical request and remembers the last answer."""
+
+    def __init__(self, llm, cache: dict[str, str]):
+        self.llm, self.cache = llm, cache
+        self.last_key: str | None = None
+        self.last_raw: str | None = None
+
+    def __call__(self, system: str, user: str, schema: dict) -> str:
+        key = request_key(system, user)
+        raw = self.cache.get(key)
+        if raw is None:
+            raw = self.llm(system, user, schema)
+        self.last_key, self.last_raw = key, raw
+        return raw

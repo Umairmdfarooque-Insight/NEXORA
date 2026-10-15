@@ -14,6 +14,7 @@ from azure.identity import (
 STORAGE_SCOPE = "https://storage.azure.com/.default"
 SQL_SCOPE = "https://database.windows.net/.default"
 FABRIC_SCOPE = "https://api.fabric.microsoft.com/.default"
+POWERBI_SCOPE = "https://analysis.windows.net/powerbi/api/.default"
 
 CACHE_NAME = "nexora"
 
