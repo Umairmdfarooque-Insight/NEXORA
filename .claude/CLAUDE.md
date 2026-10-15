@@ -50,6 +50,8 @@ uvicorn app.api.main:app --reload --port 8000   # orchestration API; Swagger at 
 
 `app/api/` is the FastAPI orchestration API (`main.py` app, CORS for `http://localhost:3000`; `runs.py` routes; `schemas.py`; `errors.py` maps exceptions to the shared error envelope; `deps.py` supplies the store). Handlers hold no business logic and there is no public state-transition endpoint. `app/workflow/next_action.py` maps each state to its `next_action`. No authentication until T-105, so run it locally only.
 
+Fabric access for runs: `connectors/fabric_api.py` (`FabricApiClient`) lists workspaces and Lakehouses (paging, 429 retry, typed errors); `workflow/scope.py` (`bind_scope`) verifies and saves a run's `scope` (`PUT /runs/{id}/scope`, locked once metadata is harvested). Connectors take the scope through `FabricLakehouseConnector.for_scope(scope)` and `FabricSQLConnector.for_scope(scope)`; with no scope they fall back to the `FABRIC_*` values in `.env`.
+
 ## Architecture
 
 A staged discovery pipeline. There is no orchestrator or entry point yet; the `test_*.py` scripts wire the stages together by hand. Data flows between stages as plain dicts or the `RequirementSpec` pydantic model:

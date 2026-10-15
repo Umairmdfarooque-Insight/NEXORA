@@ -171,6 +171,8 @@ The Fabric workspace and Lakehouse are fixed in `.env`, so every run uses the sa
 
 - Upstream calls go to `GET https://api.fabric.microsoft.com/v1/workspaces` and `GET https://api.fabric.microsoft.com/v1/workspaces/{id}/lakehouses`, using a token for `FABRIC_SCOPE`.
 - Connector factories: `FabricLakehouseConnector.for_scope(scope)` and `FabricSQLConnector.for_scope(scope)`.
+- The `scope` object also stores `workspace_name`, `lakehouse_name` and `sql_endpoint` (see [CONTRACTS.md#run](CONTRACTS.md#run)). `RunDetail` gains `warnings: [str]`, used for the no-SQL-endpoint warning.
+- `workspace_id` and `lakehouse_id` must be GUIDs, otherwise `422 VALIDATION_ERROR`. A workspace that doesn't exist is reported as `403 FORBIDDEN`, the same as one the identity can't see.
 
 #### Constraints
 - Until T-105, the identity is the local interactive credential from T-002.

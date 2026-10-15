@@ -179,7 +179,10 @@ def main() -> None:
         }
         check(
             "no endpoint changes state",
-            not any(m in ("PUT", "PATCH", "DELETE") for m, _ in methods)
+            not any(
+                m in ("PUT", "PATCH", "DELETE") and not p.endswith("/scope")
+                for m, p in methods
+            )
             and ("POST", "/runs") in methods
             and not any("transition" in p for _, p in methods),
         )

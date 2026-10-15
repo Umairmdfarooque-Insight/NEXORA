@@ -38,6 +38,22 @@ class ArtifactRef(BaseModel):
     updated_at: str
 
 
+class SqlEndpoint(BaseModel):
+    server: str
+    database: str
+
+
+class RunScope(BaseModel):
+    """The Fabric workspace and Lakehouse a run reads from (set by T-103)."""
+
+    workspace_id: str
+    workspace_name: str | None = None
+    lakehouse_id: str
+    lakehouse_name: str
+    schemas: list[str] = Field(default_factory=list)
+    sql_endpoint: SqlEndpoint | None = None
+
+
 class Run(BaseModel):
     schema_version: int = SCHEMA_VERSION
     run_id: str
@@ -47,7 +63,7 @@ class Run(BaseModel):
     constraints: list[str] = Field(default_factory=list)
     state: RunState = RunState.CREATED
     resume_state: RunState | None = None
-    scope: dict[str, Any] | None = None
+    scope: RunScope | None = None
     created_by: dict[str, Any] | None = None
     created_at: str
     updated_at: str

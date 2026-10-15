@@ -14,6 +14,28 @@ ONELAKE_TABLE_API = "https://onelake.table.fabric.microsoft.com/delta"
 
 
 class FabricLakehouseConnector:
+    """Reads Lakehouse metadata through the OneLake table API.
+
+    With no arguments it uses the workspace and Lakehouse from `.env`, for
+    scripts that don't have a run. Runs use `for_scope`.
+    """
+
+    def __init__(
+        self,
+        workspace_id: str | None = None,
+        lakehouse_id: str | None = None,
+        lakehouse_name: str | None = None,
+    ):
+        self.workspace_id = workspace_id or FABRIC_WORKSPACE_ID
+        self.lakehouse_id = lakehouse_id or FABRIC_LAKEHOUSE_ID
+        self.lakehouse_name = lakehouse_name or FABRIC_LAKEHOUSE_NAME
+
+    @classmethod
+    def for_scope(cls, scope) -> "FabricLakehouseConnector":
+        """Connector for a run's scope (a RunScope or an equivalent dict)."""
+        get = scope.get if isinstance(scope, dict) else lambda k: getattr(scope, k)
+        return cls(get("workspace_id"), get("lakehouse_id"), get("lakehouse_name"))
+
     def _get_headers(self) -> dict:
         token = get_token(STORAGE_SCOPE)
 
@@ -25,13 +47,13 @@ class FabricLakehouseConnector:
     @property
     def lakehouse_path(self) -> str:
         return (
-            f"{quote(FABRIC_WORKSPACE_ID, safe='')}/"
-            f"{quote(FABRIC_LAKEHOUSE_ID, safe='')}"
+            f"{quote(self.workspace_id, safe='')}/"
+            f"{quote(self.lakehouse_id, safe='')}"
         )
 
     @property
     def catalog_name(self) -> str:
-        return f"{FABRIC_LAKEHOUSE_NAME}.Lakehouse"
+        return f"{self.lakehouse_name}.Lakehouse"
 
     def list_schemas(self) -> list[dict]:
         url = (

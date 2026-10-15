@@ -19,6 +19,20 @@ class FabricSQLConnector:
         self.server = server or FABRIC_SQL_SERVER
         self.database = database or FABRIC_SQL_DATABASE
 
+    @classmethod
+    def for_scope(cls, scope) -> "FabricSQLConnector":
+        """Connector for the SQL endpoint of a run's scope."""
+        endpoint = (
+            scope.get("sql_endpoint")
+            if isinstance(scope, dict)
+            else scope.sql_endpoint
+        )
+        if not endpoint:
+            raise ValueError("The run's Lakehouse has no SQL endpoint yet")
+        if not isinstance(endpoint, dict):
+            endpoint = {"server": endpoint.server, "database": endpoint.database}
+        return cls(endpoint["server"], endpoint["database"])
+
     def connect(self):
         token = get_token(SQL_SCOPE)
 

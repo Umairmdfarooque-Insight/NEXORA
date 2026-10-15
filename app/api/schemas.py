@@ -1,14 +1,25 @@
 """Request and response shapes for the API."""
 
+import uuid
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
 from app.workflow.next_action import next_action
 from app.workflow.run import MAX_PROMPT_LENGTH, Run
 from app.workflow.states import RunState
 
 PREVIEW_LENGTH = 80
+
+
+def _guid(value: str) -> str:
+    try:
+        return str(uuid.UUID(value.strip()))
+    except ValueError:
+        raise ValueError("must be a GUID") from None
+
+
+Guid = Annotated[str, AfterValidator(_guid)]
 
 
 class CreateRunRequest(BaseModel):
@@ -49,10 +60,41 @@ class RunList(BaseModel):
 class RunDetail(Run):
     next_action: str
     open_questions: list[Any] = Field(default_factory=list)  # filled from T-202
+    warnings: list[str] = Field(default_factory=list)
 
     @classmethod
-    def from_run(cls, run: Run) -> "RunDetail":
-        return cls(**run.model_dump(), next_action=next_action(run.state))
+    def from_run(cls, run: Run, warnings: list[str] | None = None) -> "RunDetail":
+        return cls(
+            **run.model_dump(),
+            next_action=next_action(run.state),
+            warnings=warnings or [],
+        )
+
+
+class ScopeRequest(BaseModel):
+    workspace_id: Guid
+    lakehouse_id: Guid
+    schemas: list[Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]] = Field(
+        default_factory=list
+    )
+
+
+class WorkspaceItem(BaseModel):
+    id: str
+    display_name: str
+    type: str
+
+
+class SqlEndpointItem(BaseModel):
+    server: str
+    database: str
+
+
+class LakehouseItem(BaseModel):
+    id: str
+    display_name: str
+    workspace_id: str
+    sql_endpoint: SqlEndpointItem | None = None
 
 
 class ArtifactItem(BaseModel):
