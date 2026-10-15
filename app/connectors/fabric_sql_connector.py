@@ -1,7 +1,7 @@
 
 import pyodbc
 
-from azure.identity import InteractiveBrowserCredential
+from app.auth import SQL_SCOPE, get_token
 from app.config import (
     FABRIC_SQL_SERVER,
     FABRIC_SQL_DATABASE,
@@ -9,13 +9,8 @@ from app.config import (
 
 
 class FabricSQLConnector:
-    def __init__(self) -> None:
-        self.credential = InteractiveBrowserCredential()
-
     def connect(self):
-        token = self.credential.get_token(
-            "https://database.windows.net/.default"
-        ).token
+        token = get_token(SQL_SCOPE)
 
         # SQL Server ODBC expects the access token as UTF-16-LE bytes,
         # prefixed with its 4-byte length.
