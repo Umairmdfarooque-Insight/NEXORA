@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import (
     get_connector_factory,
     get_fabric_client,
+    get_feasibility_llm,
     get_llm,
     get_relationship_llm,
     get_runs_root,
@@ -27,6 +28,7 @@ from app.api.schemas import (
     DismissRequest,
     ExceptionRequest,
     ExceptionResponse,
+    FeasibilityResponse,
     HarvestRequest,
     HarvestResponse,
     HarvestSummary,
@@ -66,6 +68,7 @@ from app.workflow.profile_stage import profile_run, summarize
 from app.workflow.relationship_stage import analyze_run, list_relationships
 from app.workflow.relationship_stage import summarize as summarize_relationships
 from app.contracts.source_resolution import SourceResolution
+from app.workflow.feasibility_stage import check_feasibility
 from app.workflow.scope import bind_scope
 from app.workflow.source_stage import resolve_sources
 from app.workflow.states import RunState
@@ -383,6 +386,18 @@ def plan_sources(
     llm=Depends(get_source_llm),
 ):
     return resolve_sources(store, runs_root, run_id, llm)
+
+
+@router.post("/{run_id}/plan/feasibility", response_model=FeasibilityResponse)
+def plan_feasibility(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    llm=Depends(get_feasibility_llm),
+    user: Principal = Depends(current_user),
+):
+    report, run = check_feasibility(store, runs_root, run_id, llm, actor=user.upn)
+    return FeasibilityResponse(kpis=report.kpis, run=detail(run, runs_root))
 
 
 @router.get("/{run_id}/inventory", response_model=MetadataInventory, response_model_by_alias=True)

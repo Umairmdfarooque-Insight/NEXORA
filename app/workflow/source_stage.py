@@ -6,7 +6,6 @@ changes the run state. The model's answer is kept per input (a hash of the exact
 the same contract, inventory and glossary always give the same file.
 """
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -29,6 +28,7 @@ from app.workflow.conformed import load_conformed
 from app.workflow.harvest_stage import ARTIFACT as INVENTORY_ARTIFACT
 from app.workflow.harvest_stage import canonical_hash, load_inventory, write_json
 from app.workflow.inventory_review import approved_exception_ids
+from app.workflow.llm_cache import request_key, save_answer, saved_answer
 from app.workflow.run import ArtifactRef, utc_now
 from app.workflow.states import RunState
 
@@ -37,17 +37,6 @@ CURRENT = "SourceResolution.json"
 CACHE = "source_suggestions.json"
 SOURCE_STATES = (RunState.DATA_PROFILED,)
 
-
-def _request_key(user: str) -> str:
-    return hashlib.sha256(f"{SYSTEM_PROMPT}\n{user}".encode("utf-8")).hexdigest()
-
-
-def _saved_answer(run_dir: Path, key: str) -> str | None:
-    try:
-        saved = json.loads((run_dir / CACHE).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return saved.get("response") if isinstance(saved, dict) and saved.get("key") == key else None
 
 
 def resolve_sources(store: RunStore, runs_root: Path, run_id: str, llm: SourceLlm) -> SourceResolution:
@@ -67,12 +56,12 @@ def resolve_sources(store: RunStore, runs_root: Path, run_id: str, llm: SourceLl
     suggestions = Suggestions()
     if contract.entities or contract.kpis:
         user = json.dumps(build_payload(contract, inventory, glossary.terms), sort_keys=True)
-        key = _request_key(user)
-        raw = _saved_answer(run_dir, key)
+        key = request_key(SYSTEM_PROMPT, user)
+        raw = saved_answer(run_dir, CACHE, key)
         if raw is None:
             raw = llm(SYSTEM_PROMPT, user, llm_schema())
         suggestions = parse_suggestions(raw, contract, inventory)  # unusable output isn't kept
-        write_json(run_dir / CACHE, {"key": key, "response": raw})
+        save_answer(run_dir, CACHE, key, raw)
 
     entities, kpi_fields = resolve(contract, inventory, glossary, conformed, exceptions, suggestions)
 

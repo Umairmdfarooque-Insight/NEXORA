@@ -45,6 +45,10 @@ def get_source_llm() -> SourceLlm:
     return default_source_llm()
 
 
+def get_feasibility_llm() -> SourceLlm:
+    return default_source_llm()
+
+
 def get_fabric_client(
     token: str = Depends(user_token), msal_app=Depends(get_msal_app)
 ) -> FabricApiClient:

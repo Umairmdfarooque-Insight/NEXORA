@@ -372,9 +372,24 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+### T-402 — KPI feasibility and Data Gap
+
+**Before you start:** same setup as T-401 (token in Swagger, API running, SQL consent, the real model). Run A needs the Net Revenue KPI (as in T-401). Run B has the same contract plus a second KPI, `Customer Retention Rate by quarter` (formula intent "customers active in two consecutive quarters over those active in the first", time logic "by quarter"); `saleslt` can't support it. Both runs are `DATA_PROFILED` and have called `POST /runs/{id}/plan/sources`.
+
+1. 🌐 **Unsupported KPI stopped.** `POST /runs/{run_B}/plan/feasibility`. **Expected:** HTTP 200. `Customer Retention Rate` is `data_gap` with `missing` entries (for example "customer activity per period" and a quarter/date need, each with a reason) and `options: ["drop_kpi", "provide_source", "data_engineering_task"]`. `run.state` is `NEEDS_INPUT` with `resume_state: DATA_PROFILED`, and `run.data_gaps` has an entry for the KPI. Search `runs\<run_B>` for `DAX`, `EVALUATE` and `proxy` (for example `Select-String -Path runs\<run_B>\* -Pattern 'dax|proxy' -Recurse`). **Expected:** no matches.
+2. 🌐 **Supported KPI passes.** `POST /runs/{run_A}/plan/feasibility`. **Expected:** `Net Revenue` is `feasible`, `missing: []`, and every `needed` entry has `mapped` set to a column such as `saleslt.SalesLT_SalesOrderDetail.LineTotal`. The state stays `DATA_PROFILED`. `runs\<run_A>\Feasibility.json` exists and `GET /runs/{run_A}/artifacts` lists `Feasibility`.
+3. 🌐 **Deterministic override.** Open `runs\<run_A>\SourceResolution.json` and delete the field entry whose `column` is `LineTotal` from `kpi_fields`, then call `POST /runs/{run_A}/plan/feasibility` again. **Expected:** Net Revenue is `data_gap`, `missing` names the line amount ("… is not a column mapped in the source resolution"), `Feasibility.json` is version 2 and the state is `NEEDS_INPUT`. (Restore the file by calling `POST /runs/{run_A}/plan/sources`, after `python -m app.cli runs transition <run_A> DATA_PROFILED`.)
+4. 🌐 **Repeatable.** On a feasible run call the endpoint twice. **Expected:** the version stays 1 and `Feasibility.json` is byte for byte the same.
+5. 💻 **Offline checks.** `python -m app.manual_tests.t402_offline_checks`. **Expected:** `All checks passed.` (feasible and data-gap KPIs, the deterministic override, a model claiming a column the inventory lacks, one missing exclusion making a gap, time logic with and without a date column, needs the source resolution couldn't map, all KPIs gaps, NEEDS_INPUT and the data gap list, no DAX in the run folder, the one retry and 502 on unusable output, and the 404/409 cases).
+6. 💻 **Clean up.** Stop the API and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–4), which need your Entra token, SQL consent, the real model and the real Lakehouse. Claude ran step 5.
+
+---
+
 ## Next tasks
 
-Sections for T-402 and later are added when each task is implemented.
+Sections for T-403 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -398,6 +413,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t303_offline_checks.py` | T-303 | Fake-SQL-and-LLM checks of relationship candidates, evidence, rejections and the endpoints |
 | `app/manual_tests/t304_offline_checks.py` | T-304 | Checks of Gate G2, exceptions, Accept of the inventory and data gaps |
 | `app/manual_tests/t401_offline_checks.py` | T-401 | Fake-LLM checks of the glossary, source scoring, the conformed policy and `plan/sources` |
+| `app/manual_tests/t402_offline_checks.py` | T-402 | Fake-LLM checks of KPI feasibility, data gaps and `plan/feasibility` |
 
 ## Adding a task
 
