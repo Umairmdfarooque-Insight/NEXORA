@@ -132,6 +132,22 @@ def generate_plan(store: RunStore, runs_root: Path, run_id: str) -> tuple[Execut
     return plan, model, _validation(runs_root, run_id, model, plan)
 
 
+def write_new_versions(store: RunStore, runs_root: Path, run: Run, model: ModelSpec, plan: ExecutionPlan) -> None:
+    """Save `model` and `plan` as the next versions of both (after an edit): the plan is rebased
+    on the new model's hash, both files and their version copies are written, and both artifacts
+    go back to `draft`. Earlier versions are kept in `plans/`."""
+    model.version += 1
+    plan.version += 1
+    plan.based_on = {MODEL_ARTIFACT: canonical_hash(to_data(model))}
+    run_dir = Path(runs_root) / run.run_id
+    for filename, new in ((MODEL_FILE, model), (PLAN_FILE, plan)):
+        save_yaml(new, run_dir / filename)
+        save_yaml(new, run_dir / "plans" / filename.replace(".yaml", f".v{new.version}.yaml"))
+    _register(store, run, MODEL_ARTIFACT, MODEL_FILE, model, model.based_on)
+    _register(store, run, PLAN_ARTIFACT, PLAN_FILE, plan, plan.based_on)
+    store.save(run)
+
+
 def read_plan(store: RunStore, runs_root: Path, run_id: str) -> tuple[ExecutionPlan, ModelSpec, GateResult]:
     """The saved files, validated again (so a hand edit shows up)."""
     store.get(run_id)

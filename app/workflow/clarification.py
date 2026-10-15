@@ -46,11 +46,11 @@ class ContractLocked(Exception):
 
 
 class StaleVersion(Exception):
-    def __init__(self, expected: str, current: str):
+    def __init__(self, expected: str, current: str, what: str = "contract"):
         self.expected = expected
         self.current = current
         super().__init__(
-            "The contract changed since you loaded it. Reload it and apply your edit again."
+            f"The {what} changed since you loaded it. Reload it and apply your edit again."
         )
 
 

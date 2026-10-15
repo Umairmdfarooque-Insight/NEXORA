@@ -11,6 +11,7 @@ from app.workflow.approval import Action, ApprovalRecord
 from app.workflow.gates import GateResult
 from app.workflow.inventory_review import DataGap
 from app.workflow.next_action import next_action
+from app.workflow.plan_review import PlanOp
 from app.workflow.run import MAX_PROMPT_LENGTH, Run
 from app.workflow.states import RunState
 
@@ -103,6 +104,17 @@ class PlanResponse(BaseModel):
     execution_plan: ExecutionPlan
     model_spec: ModelSpec
     validation: GateResult
+
+
+class PlanEditRequest(BaseModel):
+    expected_hash: str
+    ops: Annotated[list[PlanOp], Field(min_length=1, max_length=50)]
+
+
+class PlanEditResponse(BaseModel):
+    model_spec: ModelSpec
+    execution_plan: ExecutionPlan
+    gate_result: GateResult
 
 
 class MeResponse(BaseModel):

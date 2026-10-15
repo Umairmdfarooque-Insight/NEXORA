@@ -193,6 +193,7 @@ def main() -> None:
                 m in ("PUT", "PATCH", "DELETE")
                 and not p.endswith("/scope")
                 and "/contract/kpis/" not in p  # KPI edit (T-203) never changes run state
+                and not p.endswith("/plan")  # plan edit (T-405) never changes run state
                 for m, p in methods
             )
             and ("POST", "/runs") in methods

@@ -347,7 +347,7 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 7. 🌐 **Re-harvest after Accept.** On run A click **Re-harvest**. **Expected:** the state returns to `REQUIREMENT_APPROVED`, the inventory is version 2 and a **Draft**, profiles are gone, and `G2.3` fails until you profile again.
 8. 🌐 **M3 exit.** Using only Rayfin: Harvest, Profile candidates, Analyze relationships, then Accept. **Expected:** an accepted inventory exists for the run (`MetadataInventory.json`, status `approved`) and every table, column profile, warning and relationship is reviewable on the Inventory page.
 9. 💻 **Offline checks.** `python -m app.manual_tests.t304_offline_checks`. **Expected:** `All checks passed.` (G2.1-G2.5 incl. a candidate that failed to harvest or profile, no candidates, exceptions and roles, Accept with a stale hash and wrong state, re-harvest, data gaps, and the 404/409/422/500 cases).
-10. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `pass 29`, `fail 0`. `npm run typecheck` and `npm run build` also finish without errors, and the build lists `/runs/[id]/inventory`.
+10. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `fail 0` (`pass 29` when T-304 was done; later tasks add tests, so it is higher now). `npm run typecheck` and `npm run build` also finish without errors, and the build lists `/runs/[id]/inventory`.
 11. 💻 **Clean up.** Restore `config\roles.yaml` and `config\conformed_sources.yaml` (`git checkout config/roles.yaml config/conformed_sources.yaml`), stop the API and UI, and delete the test runs' folders under `runs\`.
 
 **Not run by Claude:** the live and browser steps (1–8), which need your Entra sign-in, SQL consent and the real Lakehouse. Claude ran steps 9 and 10.
@@ -420,9 +420,27 @@ Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it 
 
 ---
 
+### T-405 — Gate G3 and plan review UI
+
+**Before you start:** same setup as T-404 (token in Swagger, API running with `uvicorn app.api.main:app --reload --port 8000`, SQL consent), plus the UI (`cd rayfin-ui; npm install; npm run dev`, sign in at <http://localhost:3000>). Open `config\roles.yaml` and put **your own UPN** in `bi_engineer` (restore it afterwards). Use run A of T-404, which has a generated plan (Net Revenue and a monthly KPI, entities Sales, Product and Customer, scope `saleslt` and `nexora_test`, the order header and date relationships analyzed). Open <http://localhost:3000/runs/{run_A}/plan>. In this model the date joins through the order header, so the relationship names are `Sales_Product`, `Sales_SalesLT_SalesOrderHeader`, `SalesLT_SalesOrderHeader_Customer` and `SalesLT_SalesOrderHeader_Date`; read the real names on the screen.
+
+1. 🌐 **Rationale visible.** Look at **Tables**. **Expected:** every table shows its role, source and a line "Why: …" (for example "Product: Glossary match 'product'; conformed; key ProductID unique (score 0.9)"). **Rejected alternatives** lists the tables that were not chosen with their reason (for example `nexora_test.dim_product_dupes`: "Not conformed and no approved exception; key ProductID not unique"). **Relationships** shows each relationship's evidence ("R3, high confidence, many to one, 100% overlap, 0% orphans") and **Show SQL**. **Measures**, **Storage mode**, **Row-level security** and **Data-engineering actions** are listed too.
+2. 🌐 **Edit re-validates.** On the `SalesLT_SalesOrderHeader_Date` relationship click **Remove**. **Expected:** the page reloads as the next plan version, the **Gate G3 checklist** shows `G3.6` as **Fail** with "measures[Monthly Revenue]: needs Date related to Sales, but no relationship path connects them", and **Accept** says "Accept is unavailable: Gate G3 failed: G3.6." **History** has an `EDIT` entry "remove_relationship SalesLT_SalesOrderHeader_Date". Via Swagger the same is `PATCH /runs/{run_A}/plan` with `{"expected_hash": "<hash of ExecutionPlan from GET /runs/{run_A}/artifacts>", "ops": [{"op": "remove_relationship", "name": "SalesLT_SalesOrderHeader_Date"}]}`, which returns `gate_result.passed: false`. An unknown op such as `{"op": "explode"}` is `422` and its message lists the four valid ops.
+3. 🌐 **Approve.** Click **Regenerate plan** (or use the relationship's override or remove the Monthly Revenue measure instead), so that G3 passes again, then click **Accept**. **Expected:** the summary shows the state `PLAN_APPROVED` and the badge **Approved**; `runs\<run_A>\approvals.jsonl` ends with an `ACCEPT` record for `ExecutionPlan` whose `artifact_hash` equals the `ExecutionPlan` hash in `GET /runs/{run_A}/artifacts`, with role `bi_engineer` and a `gate_result_ref` `gates/G3-…`. **Reject** (with a comment) on the approved plan reopens it: state `DATA_PROFILED`, badge **Draft**.
+4. 🌐 **Role enforced.** In `config\roles.yaml` remove your UPN from `bi_engineer` (use `[someone.else@contoso.com]`), reload the page. **Expected:** **Accept** says "Only a bi_engineer can accept or reject the plan." Via Swagger, `POST /runs/{run_A}/approvals` with `{"artifact": "ExecutionPlan", "action": "ACCEPT", "expected_hash": "<hash>"}` is `403 FORBIDDEN` and the state doesn't change.
+5. 🌐 **Blocking action.** On run B (scope `saleslt` only, a KPI with time logic), generate the plan. **Expected:** **Data-engineering actions** shows "DE1 … Blocking, Owner: unassigned" (create a date table), and `G3.5` is **Fail** with the action and its owner, so **Accept** is unavailable.
+6. 🌐 **M4 exit.** Using Rayfin only: Resolve sources, Check feasibility, Generate plan, review, and Accept. **Expected:** an approved plan exists (`ModelSpec.yaml` and `ExecutionPlan.yaml`, status `approved`, run state `PLAN_APPROVED`) and its tables, rationale, relationships, evidence and measures are reviewable on the Plan review screen.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t405_offline_checks`. **Expected:** `All checks passed.` (G3.1-G3.7 each passing and failing, the four edit operations, atomic and invalid edits, stale hashes, versions kept, EDIT records, Accept with G3 and roles, `GATE_FAILED`, reject and reopen, approving again, and the 404/409/422/500 cases).
+8. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `pass 42`, `fail 0`. `npm run typecheck` and `npm run build` also finish without errors, and the build lists `/runs/[id]/plan`.
+9. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API and UI, and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live and browser steps (1–6), which need your Entra sign-in, SQL consent, the real model and the real Lakehouse. Claude ran steps 7 and 8.
+
+---
+
 ## Next tasks
 
-Sections for T-405 and later are added when each task is implemented.
+Sections for T-501 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -449,6 +467,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t402_offline_checks.py` | T-402 | Fake-LLM checks of KPI feasibility, data gaps and `plan/feasibility` |
 | `app/manual_tests/t403_offline_checks.py` | T-403 | Fake-SQL checks of bridge detection, mapping-table evidence, derivation rules, approvals and `plan/bridges` |
 | `app/manual_tests/t404_offline_checks.py` | T-404 | Checks of ModelSpec and ExecutionPlan generation, plan validation, the `plan` endpoints and `cli plan validate` |
+| `app/manual_tests/t405_offline_checks.py` | T-405 | Checks of Gate G3, plan edits, Accept and Reject of the ExecutionPlan |
 
 ## Adding a task
 

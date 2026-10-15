@@ -202,6 +202,10 @@ def perform(
         if action is not Action.ACCEPT:
             raise UnsupportedAction(artifact, action)
         return accept_inventory(store, runs_root, run_id, user, expected_hash, comment)
+    if artifact == "ExecutionPlan":
+        from app.workflow.plan_review import decide_plan  # avoids a circular import
+
+        return decide_plan(store, runs_root, run_id, action, user, expected_hash, comment)
     if artifact.startswith("BridgeProposal:"):
         from app.workflow.bridge_stage import decide_bridge  # avoids a circular import
 
