@@ -214,6 +214,16 @@ class HarvestResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class ProfileRequest(BaseModel):
+    tables: list[Annotated[str, StringConstraints(strip_whitespace=True, pattern=r"^[^.]+\.[^.]+$")]] | None = None
+
+
+class ProfileResponse(BaseModel):
+    profiled: int
+    warnings: int
+    errors: int
+
+
 class Health(BaseModel):
     status: str
     app: str

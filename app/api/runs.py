@@ -9,6 +9,7 @@ from app.api.deps import (
     get_fabric_client,
     get_llm,
     get_runs_root,
+    get_sql_connector_factory,
     get_store,
 )
 from app.api.schemas import (
@@ -24,6 +25,8 @@ from app.api.schemas import (
     HarvestSummary,
     KpiEditRequest,
     KpiEditResponse,
+    ProfileRequest,
+    ProfileResponse,
     QuestionResponse,
     RunDetail,
     RunList,
@@ -44,6 +47,7 @@ from app.workflow.compile_stage import compile_run, current_contract, open_quest
 from app.contracts.metadata_inventory import MetadataInventory
 from app.workflow.gates import GateResult
 from app.workflow.harvest_stage import ARTIFACT as INVENTORY, harvest_run, load_inventory, summary
+from app.workflow.profile_stage import profile_run, summarize
 from app.workflow.scope import bind_scope
 from app.workflow.states import RunState
 
@@ -269,6 +273,24 @@ def harvest(
         ),
         warnings=inventory.warnings,
     )
+
+
+@router.post("/{run_id}/profile", response_model=ProfileResponse)
+def profile(
+    run_id: str,
+    body: ProfileRequest | None = None,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    sql_connector_for_scope=Depends(get_sql_connector_factory),
+):
+    profiles = profile_run(
+        store,
+        runs_root,
+        run_id,
+        sql_connector_for_scope,
+        tables=body.tables if body else None,
+    )
+    return ProfileResponse(**summarize(profiles))
 
 
 @router.get("/{run_id}/inventory", response_model=MetadataInventory, response_model_by_alias=True)

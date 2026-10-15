@@ -15,12 +15,20 @@ class FabricSQLConnector:
     `database` to reach another one, such as the control database.
     """
 
-    def __init__(self, server: str | None = None, database: str | None = None):
+    def __init__(
+        self,
+        server: str | None = None,
+        database: str | None = None,
+        token_provider=None,
+    ):
+        # With a token_provider (the API's on-behalf-of token for the signed-in
+        # user) it is used instead of the local interactive credential.
+        self._token_provider = token_provider
         self.server = server or FABRIC_SQL_SERVER
         self.database = database or FABRIC_SQL_DATABASE
 
     @classmethod
-    def for_scope(cls, scope) -> "FabricSQLConnector":
+    def for_scope(cls, scope, token_provider=None) -> "FabricSQLConnector":
         """Connector for the SQL endpoint of a run's scope."""
         endpoint = (
             scope.get("sql_endpoint")
@@ -31,10 +39,10 @@ class FabricSQLConnector:
             raise ValueError("The run's Lakehouse has no SQL endpoint yet")
         if not isinstance(endpoint, dict):
             endpoint = {"server": endpoint.server, "database": endpoint.database}
-        return cls(endpoint["server"], endpoint["database"])
+        return cls(endpoint["server"], endpoint["database"], token_provider)
 
     def connect(self):
-        token = get_token(SQL_SCOPE)
+        token = self._token_provider() if self._token_provider else get_token(SQL_SCOPE)
 
         # SQL Server ODBC expects the access token as UTF-16-LE bytes,
         # prefixed with its 4-byte length.
