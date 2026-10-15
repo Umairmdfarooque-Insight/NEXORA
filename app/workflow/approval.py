@@ -86,8 +86,8 @@ class GateFailed(Exception):
 
 
 class AlreadyApproved(Exception):
-    def __init__(self):
-        super().__init__("The contract is already approved")
+    def __init__(self, message: str = "The contract is already approved"):
+        super().__init__(message)
 
 
 class UnknownArtifact(Exception):
@@ -202,6 +202,10 @@ def perform(
         if action is not Action.ACCEPT:
             raise UnsupportedAction(artifact, action)
         return accept_inventory(store, runs_root, run_id, user, expected_hash, comment)
+    if artifact.startswith("BridgeProposal:"):
+        from app.workflow.bridge_stage import decide_bridge  # avoids a circular import
+
+        return decide_bridge(store, runs_root, run_id, artifact, action, user, expected_hash, comment)
     if artifact != ARTIFACT:
         raise UnknownArtifact(artifact)
     run = store.get(run_id)
