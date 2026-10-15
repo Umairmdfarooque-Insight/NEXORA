@@ -47,7 +47,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-001 | Fix dependencies and configuration loading | [M0 Baseline](M0-baseline.md) | Done | task/T-001-fix-dependencies-and-configuration-loading |
 | T-002 | Share one Azure credential across connectors | M0 | Done | task/T-002-share-one-azure-credential |
 | T-003 | Environment smoke-check command | M0 | Done | task/T-003-environment-smoke-check-command |
-| T-004 | Test fixtures in the sandbox Lakehouse | M0 | Not started |  |
+| T-004 | Test fixtures in the sandbox Lakehouse | M0 | Done | task/T-004-test-fixtures-sandbox-lakehouse |
 | T-101 | Run model, state machine and run store | [M1 Foundation](M1-foundation.md) | Not started |  |
 | T-102 | Orchestration API skeleton | M1 | Not started |  |
 | T-103 | Workspace and Lakehouse selection | M1 | Not started |  |
