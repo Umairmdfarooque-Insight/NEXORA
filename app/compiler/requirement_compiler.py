@@ -98,7 +98,12 @@ def llm_schema() -> dict:
     return json.loads(_llm_schema_json())
 
 
-def build_user_prompt(run: Run, previous: bc.BusinessContract | None, errors: list[str]) -> str:
+def build_user_prompt(
+    run: Run,
+    previous: bc.BusinessContract | None,
+    errors: list[str],
+    guidance: str | None = None,
+) -> str:
     """The only data sent to the LLM: prompt, subject area, outputs, constraints and the
     previous contract. No source data (NFR-008)."""
     parts = [f"Business requirement:\n{run.prompt}"]
@@ -110,6 +115,11 @@ def build_user_prompt(run: Run, previous: bc.BusinessContract | None, errors: li
         parts.append("Constraints:\n" + "\n".join(f"- {c}" for c in run.constraints))
     if previous is not None:
         parts.append("Previous contract (YAML):\n" + bc.to_yaml(previous))
+    if guidance:
+        parts.append(
+            "Reviewer guidance for this redraft (follow it unless it contradicts a locked fact):\n"
+            + guidance
+        )
     if errors:
         parts.append(
             "Your previous output was rejected. Fix these problems and answer again:\n"
@@ -186,6 +196,7 @@ def compile_requirement(
     llm: LlmCall | None = None,
     config=None,
     warnings: list[str] | None = None,
+    guidance: str | None = None,
 ) -> bc.BusinessContract:
     """Compile `run.prompt` into a draft contract (version = previous version + 1).
 
@@ -208,6 +219,7 @@ def compile_requirement(
             "errors": [],
             "attempts_log": [],
             "warnings": [],
+            "guidance": guidance,
         },
         run_id=run.run_id,
         stage="compile",

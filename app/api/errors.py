@@ -31,6 +31,7 @@ from app.llm.errors import (
     LlmUpstreamError,
     PromptRejected,
 )
+from app.workflow.approval import AlreadyApproved, Forbidden, GateFailed, UnknownArtifact
 from app.workflow.clarification import ContractLocked, NotFound, QuestionConflict, StaleVersion
 from app.workflow.compile_stage import WrongState
 from app.workflow.scope import SchemaNotFound, ScopeLocked
@@ -124,6 +125,31 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"state": exc.state.value, "allowed": [s.value for s in exc.allowed]},
         )
+
+    @app.exception_handler(Forbidden)
+    async def forbidden(request: Request, exc: Forbidden):
+        return error_response(403, "FORBIDDEN", str(exc), {"required_role": exc.role})
+
+    @app.exception_handler(GateFailed)
+    async def gate_failed(request: Request, exc: GateFailed):
+        return error_response(
+            409,
+            "GATE_FAILED",
+            f"Gate {exc.result.gate} failed: {', '.join(exc.failed)}",
+            {
+                "gate": exc.result.gate,
+                "failed_checks": exc.failed,
+                "gate_result": exc.result.model_dump(mode="json"),
+            },
+        )
+
+    @app.exception_handler(AlreadyApproved)
+    async def already_approved(request: Request, exc: AlreadyApproved):
+        return error_response(409, "ALREADY_APPROVED", str(exc))
+
+    @app.exception_handler(UnknownArtifact)
+    async def unknown_artifact(request: Request, exc: UnknownArtifact):
+        return error_response(422, "VALIDATION_ERROR", str(exc), {"artifact": exc.artifact})
 
     @app.exception_handler(NotFound)
     async def contract_item_not_found(request: Request, exc: NotFound):

@@ -33,6 +33,7 @@ class CompileState(TypedDict, total=False):
     draft: Any  # BusinessContract | None
     contract: Any  # BusinessContract | None
     warnings: list[str]
+    guidance: str | None
 
 
 def build_compile_graph(llm: Callable[[str, str, dict], str], config: CriticalTerms):
@@ -40,7 +41,9 @@ def build_compile_graph(llm: Callable[[str, str, dict], str], config: CriticalTe
     schema = llm_schema()
 
     def llm_compile(state: CompileState) -> dict:
-        user = build_user_prompt(state["run"], state.get("previous"), state.get("errors", []))
+        user = build_user_prompt(
+            state["run"], state.get("previous"), state.get("errors", []), state.get("guidance")
+        )
         raw = llm(SYSTEM_PROMPT, user, schema)
         return {"raw": raw, "attempt": state.get("attempt", 0) + 1}
 

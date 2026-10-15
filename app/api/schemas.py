@@ -3,9 +3,11 @@
 import uuid
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BaseModel, Field, StringConstraints
+from pydantic import AfterValidator, BaseModel, Field, StringConstraints, model_validator
 
 from app.contracts.business_contract import BusinessContract, ExpectedExample
+from app.workflow.approval import Action, ApprovalRecord
+from app.workflow.gates import GateResult
 from app.workflow.next_action import next_action
 from app.workflow.run import MAX_PROMPT_LENGTH, Run
 from app.workflow.states import RunState
@@ -97,12 +99,11 @@ class QuestionResponse(BaseModel):
     contract: BusinessContract
 
 
-class KpiEditRequest(BaseModel):
+class KpiChanges(BaseModel):
     """Partial Kpi: only the fields sent are changed."""
 
     model_config = {"extra": "forbid"}
 
-    expected_hash: str
     formula_intent: str | None = None
     grain: str | None = None
     filters: list[str] | None = None
@@ -111,6 +112,41 @@ class KpiEditRequest(BaseModel):
     currency: str | None = None
     expected_examples: list[ExpectedExample] | None = None
     rationale: str | None = None
+
+
+class KpiEditRequest(KpiChanges):
+    expected_hash: str
+
+
+class ContractEdits(BaseModel):
+    """The `edits` of an EDIT approval: partial KPI changes by KPI name."""
+
+    model_config = {"extra": "forbid"}
+
+    kpis: dict[str, KpiChanges] = Field(default_factory=dict)
+
+
+class ApprovalRequest(BaseModel):
+    artifact: str
+    action: Action
+    comment: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
+    edits: ContractEdits | None = None
+    expected_hash: str
+
+    @model_validator(mode="after")
+    def _action_rules(self) -> "ApprovalRequest":
+        if self.action is Action.REJECT and not self.comment:
+            raise ValueError("a comment is required to reject")
+        if self.action is Action.EDIT and not (self.edits and self.edits.kpis):
+            raise ValueError("edits.kpis is required for an edit")
+        return self
+
+
+class ApprovalResponse(BaseModel):
+    approval: ApprovalRecord
+    run: RunDetail
+    gate_result: GateResult | None = None
+    explanation: dict[str, Any] | None = None
 
 
 class KpiEditResponse(BaseModel):

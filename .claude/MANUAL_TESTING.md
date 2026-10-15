@@ -243,9 +243,30 @@ To create a run without the UI, use `POST /runs` in Swagger with `{"prompt": "�
 
 ---
 
+### T-204 — Approval service and Gate G1
+
+**Before you start:** same setup as T-202 and T-203 (token in Swagger, API running with `uvicorn app.api.main:app --port 8000`). Open `config\roles.yaml` and put **your own UPN** (the `upn` of your Entra sign-in; it is the `upn` in `created_by` of a run you create) in the `business_owner` list in place of `user@contoso.com`. The file is committed as-is, so don't commit your real UPN unless you mean to publish it. Roles are read on every request, so no restart is needed after editing.
+
+Create a run with `{"prompt": "Show revenue by month for 2024"}` and compile it (`POST /runs/{run_id}/compile`). Every approval call needs `expected_hash`: copy `hash` of `BusinessContract` from `GET /runs/{run_id}/artifacts` (it changes after each action).
+
+1. 🌐 **Gate blocks.** `POST /runs/{run_id}/approvals` with `{"artifact": "BusinessContract", "action": "ACCEPT", "expected_hash": "<hash>"}` while the Revenue question is open. **Expected:** HTTP 409, code `GATE_FAILED`, `details.failed_checks` containing `G1.2` (and `G1.3`, since the KPI has no definition yet), and `details.gate_result` with each check. The run is still `NEEDS_CLARIFICATION`, there is no `approvals.jsonl`, and `runs\<run_id>\gates\` holds a `G1-*.json` file. `POST /runs/{run_id}/gates/G1/check` returns the same checks as a `GateResult` with `"passed": false`.
+2. 🌐 **Approve.** Answer the question: `POST /runs/{run_id}/questions/RULE-REVENUE/answer` with `{"answer": "Net Revenue = SUM(LineTotal) excluding cancelled orders"}`. Check that `POST /runs/{run_id}/gates/G1/check` gives `"passed": true` (G1.5 is a `warning`: "not yet assessed"). Then `ACCEPT` with the new hash and `"comment": "Looks right"`. **Expected:** HTTP 200 with `approval`, `run` and `gate_result`. `run.state` is `REQUIREMENT_APPROVED`, `runs\<run_id>\BusinessContract.yaml` has `status: approved`, and `runs\<run_id>\approvals.jsonl` has one line with your UPN, an `at` timestamp, `artifact_hash` equal to the artifact hash in `GET /runs/{run_id}/artifacts`, `action: ACCEPT`, `role: business_owner` and a `gate_result_ref`. `GET /runs/{run_id}/approvals` lists it. `python -m app.cli contract validate runs\<run_id>\BusinessContract.yaml` prints `VALID`.
+3. 🌐 **Locked.** `PUT /runs/{run_id}/contract/kpis/Net%20Revenue` with `{"currency": "EUR", "expected_hash": "<hash>"}` (use the KPI's name from the contract). **Expected:** HTTP 409, code `CONTRACT_LOCKED`. Also: `ACCEPT` again gives `409 ALREADY_APPROVED`, and `REJECT`, `EDIT` and `REGENERATE` give `409 CONTRACT_LOCKED`. `EXPLAIN` still works.
+4. 🌐 **Role enforced.** In `config\roles.yaml` remove your UPN from `business_owner` (use `[someone.else@contoso.com]`). Create, compile and answer a second run, then `ACCEPT` it. **Expected:** HTTP 403, code `FORBIDDEN`, and the run is unchanged. `REJECT` also gives 403; `EXPLAIN` still works. **Restore your UPN** in the file afterwards.
+5. 🌐 **Reject.** On a draft run with no blocking question (the second run, after restoring your role), `REJECT` with `"comment": "Exclude tax as well"`. **Expected:** HTTP 200, `run.state` is `NEEDS_CLARIFICATION`, `run.open_questions` has `{"id": "REV-1", "text": "Exclude tax as well", "blocking": true, "source": "reviewer", …}`, and `approvals.jsonl` ends with a `REJECT` record carrying the comment. `REJECT` with no comment gives `422`. Compile the run again: `REV-1` is still open. Answer it with `POST /runs/{run_id}/questions/REV-1/answer` and the run returns to `CREATED`.
+6. 🌐 **Explain.** `EXPLAIN` on any draft run. **Expected:** HTTP 200 with `explanation.kpis` and `explanation.questions`, each with a readable `rationale` (for example "Net Revenue is defined as: …" or "has no definition yet"), an `EXPLAIN` record in `approvals.jsonl`, and the run state unchanged.
+7. 🌐 **Edit, regenerate and stale hash.** `EDIT` with `"edits": {"kpis": {"Net Revenue": {"currency": "EUR"}}}` changes the KPI and writes an `EDIT` record. `REGENERATE` with `"comment": "Use fiscal months"` recompiles (a few seconds) keeping the locked facts and writes a `REGENERATE` record. Any action with an old `expected_hash` gives `409 STALE_VERSION`.
+8. 💻 **Bad config.** Rename `config\roles.yaml` to `roles.bak` and start the API. **Expected:** startup fails with `Configuration file roles.yaml is missing`. Rename it back.
+9. 💻 **Offline checks.** `python -m app.manual_tests.t204_offline_checks`. **Expected:** `All checks passed.` (fake LLM and a temporary roles file: G1 checks, accept, locking, roles, reject, explain, edit, regenerate, and the 403/404/409/422 cases).
+10. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1–7), which need your Entra token and the real model.
+
+---
+
 ## Next tasks
 
-Sections for T-204 and later are added when each task is implemented.
+Sections for T-205 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -262,6 +283,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t201_offline_checks.py` | T-201 | Checks of BusinessContract validation, round trip, CLI and schema export |
 | `app/manual_tests/t202_offline_checks.py` | T-202 | Fake-LLM checks of the compile graph, ambiguity rules, versioning and the /compile endpoint |
 | `app/manual_tests/t203_offline_checks.py` | T-203 | Fake-LLM checks of answering, dismissing, locked facts and KPI edits |
+| `app/manual_tests/t204_offline_checks.py` | T-204 | Fake-LLM checks of Gate G1, the approval actions, locking, roles and the approvals log |
 
 ## Adding a task
 

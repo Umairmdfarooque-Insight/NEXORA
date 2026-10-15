@@ -13,6 +13,8 @@ from app.api.deps import (
 )
 from app.api.schemas import (
     AnswerRequest,
+    ApprovalRequest,
+    ApprovalResponse,
     ArtifactItem,
     CompileResponse,
     CreateRunRequest,
@@ -28,8 +30,15 @@ from app.api.schemas import (
 from app.api.security import Principal, current_user
 from app.connectors.fabric_api import FabricApiClient
 from app.store.base import RunStore
-from app.workflow.clarification import answer_question, dismiss_question, edit_kpi
+from app.workflow.approval import ApprovalRecord, check_g1, list_approvals, perform
+from app.workflow.clarification import (
+    NotFound,
+    answer_question,
+    dismiss_question,
+    edit_kpi,
+)
 from app.workflow.compile_stage import compile_run, open_questions
+from app.workflow.gates import GateResult
 from app.workflow.scope import bind_scope
 from app.workflow.states import RunState
 
@@ -142,6 +151,58 @@ def update_kpi(
     changes = body.model_dump(exclude={"expected_hash"}, exclude_unset=True, mode="json")
     contract = edit_kpi(store, runs_root, run_id, kpi_name, changes, body.expected_hash)
     return KpiEditResponse(contract=contract)
+
+
+@router.post("/{run_id}/gates/{gate}/check", response_model=GateResult)
+def check_gate(
+    run_id: str,
+    gate: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    if gate != "G1":
+        raise NotFound(f"No gate {gate!r}; only G1 is available")
+    return check_g1(store, runs_root, run_id)
+
+
+@router.post("/{run_id}/approvals", response_model=ApprovalResponse)
+def approve(
+    run_id: str,
+    body: ApprovalRequest,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    llm=Depends(get_llm),
+    user: Principal = Depends(current_user),
+):
+    outcome = perform(
+        store,
+        runs_root,
+        run_id,
+        body.artifact,
+        body.action,
+        {"oid": user.oid, "upn": user.upn},
+        body.expected_hash,
+        comment=body.comment,
+        edits=body.edits.model_dump(exclude_unset=True, mode="json") if body.edits else None,
+        llm=llm,
+    )
+    return ApprovalResponse(
+        approval=outcome.approval,
+        run=RunDetail.from_run(
+            outcome.run, open_questions=open_questions(runs_root, run_id)
+        ),
+        gate_result=outcome.gate_result,
+        explanation=outcome.explanation,
+    )
+
+
+@router.get("/{run_id}/approvals", response_model=list[ApprovalRecord])
+def get_approvals(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    return list_approvals(store, runs_root, run_id)
 
 
 @router.put("/{run_id}/scope", response_model=RunDetail)
