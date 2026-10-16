@@ -18,6 +18,7 @@ The schema versions below are the ones published at
 https://github.com/microsoft/json-schemas/tree/main/fabric/item/report (checked for T-602).
 """
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -267,17 +268,18 @@ def _report() -> dict:
     }
 
 
+def file_bytes(data: dict) -> bytes:
+    return (json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8")  # bytes: LF on Windows
+
+
 def _write(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes((json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))  # bytes: LF on Windows
+    path.write_bytes(file_bytes(data))
 
 
-def generate_pbir(plan: ReportPlan, model_item_id: str, out_dir: Path, spec: ModelSpec) -> list[Path]:
-    """Write the PBIR folder of `plan` into `out_dir` (created if needed) and return the files, sorted.
-
-    `spec` is the approved ModelSpec: it says which table owns each measure. Raises
-    PbirGenerationError, naming the visual, before the first file is written.
-    """
+def build_files(plan: ReportPlan, model_item_id: str, spec: ModelSpec) -> dict[str, dict]:
+    """Every file of the PBIR folder of `plan` as data, by relative path. Nothing is written; the
+    repair service uses it to regenerate the file of one visual or page from the plan."""
     if not plan.pages:
         raise PbirGenerationError("The plan has no pages: nothing to generate")
     if not model_item_id.strip():
@@ -306,13 +308,33 @@ def generate_pbir(plan: ReportPlan, model_item_id: str, out_dir: Path, spec: Mod
     for i in plan.interactions:
         if i.from_visual not in seen or i.to_visual not in seen:
             raise PbirGenerationError(f"interaction {i.from_visual} -> {i.to_visual}: a visual doesn't exist")
+    return files
 
+
+def generate_pbir(plan: ReportPlan, model_item_id: str, out_dir: Path, spec: ModelSpec) -> list[Path]:
+    """Write the PBIR folder of `plan` into `out_dir` (created if needed) and return the files, sorted.
+
+    `spec` is the approved ModelSpec: it says which table owns each measure. Raises
+    PbirGenerationError, naming the visual, before the first file is written.
+    """
+    files = build_files(plan, model_item_id, spec)
     out_dir = Path(out_dir)
     written = []
     for rel in sorted(files):
         _write(out_dir / rel, files[rel])
         written.append(out_dir / rel)
     return written
+
+
+def folder_digest(folder: Path) -> str:
+    """One hash over the path and bytes of every file of the report except `renders/` (the PNGs
+    that validation saves beside the definition for review), so rendering doesn't change it."""
+    folder = Path(folder)
+    digest = hashlib.sha256()
+    for path in sorted(p for p in folder.rglob("*") if p.is_file() and p.relative_to(folder).parts[0] != "renders"):
+        digest.update(path.relative_to(folder).as_posix().encode("utf-8") + b"\0")
+        digest.update(path.read_bytes() + b"\0")
+    return "sha256:" + digest.hexdigest()
 
 
 # --- the structural check --------------------------------------------------------------------------

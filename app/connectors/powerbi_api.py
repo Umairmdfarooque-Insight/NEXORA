@@ -38,6 +38,11 @@ class DaxError(Exception):
     """A DAX query was rejected or failed; the message is the engine's own."""
 
 
+class ExportUnavailable(Exception):
+    """A report can't be exported to an image here (no Premium or Fabric capacity, or the export
+    was refused or failed). The message is Power BI's."""
+
+
 def _json(response) -> dict:
     try:
         body = response.json()
@@ -120,6 +125,32 @@ class PowerBiClient:
             if self._clock() >= deadline:
                 raise FabricTimeout("The refresh did not finish in time")
             self._sleep(DEFAULT_POLL_WAIT)
+
+    def export_report_page(self, workspace_id: str, report_id: str, page_name: str, timeout_s: int = 300) -> bytes:
+        """Export one page of a report to PNG and return the image. Raises ExportUnavailable if
+        Power BI refuses or fails the export (it needs Fabric or Premium capacity) and FabricTimeout
+        if it doesn't finish in time."""
+        base = f"{POWERBI_API}/groups/{workspace_id}/reports/{report_id}"
+        body = {"format": "PNG", "powerBIReportConfiguration": {"pages": [{"pageName": page_name}]}}
+        started = self._call("POST", f"{base}/ExportTo", body, ok_errors=(400, 403, 404))
+        if started.status_code in (400, 403, 404):
+            raise ExportUnavailable(_engine_message(_json(started)) if started.status_code == 400 else f"HTTP {started.status_code}")
+        export_id = _json(started).get("id")
+        if not export_id:
+            raise ExportUnavailable("Power BI accepted the export without an export id")
+        deadline = self._clock() + timeout_s
+        while True:
+            state = _json(self._call("GET", f"{base}/exports/{export_id}"))
+            status = state.get("status")
+            if status == "Succeeded":
+                break
+            if status == "Failed":
+                error = state.get("error") or {}
+                raise ExportUnavailable(str(error.get("message") or error.get("code") or "the export failed"))
+            if self._clock() >= deadline:
+                raise FabricTimeout("The export did not finish in time")
+            self._sleep(DEFAULT_POLL_WAIT)
+        return self._call("GET", f"{base}/exports/{export_id}/file").content
 
     def execute_dax(self, workspace_id: str, dataset_id: str, dax: str, impersonate: str | None = None) -> list[dict]:
         """The rows of one DAX query. Raises DaxError with the engine's message if it fails."""

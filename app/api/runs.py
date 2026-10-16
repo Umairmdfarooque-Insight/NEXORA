@@ -52,6 +52,7 @@ from app.api.schemas import (
     QuestionResponse,
     ReportGenerateResponse,
     ReportPlanResponse,
+    ReportValidateResponse,
     RunDetail,
     RunList,
     RunSummary,
@@ -91,6 +92,7 @@ from app.workflow.measure_stage import add_measures
 from app.report.planner import LlmCall as ReportLlm
 from app.workflow.report_plan_stage import generate_report_plan, read_report_plan
 from app.workflow.report_stage import generate_report
+from app.workflow.report_validate_stage import validate_report
 from app.connectors.powerbi_api import PowerBiClient
 from app.deploy.fabric_items import FabricItemsClient
 from app.model.recon_sql import LlmCall as ReconLlm
@@ -577,6 +579,31 @@ def report_generate(
     return ReportGenerateResponse(
         version=version, files=files, report_item_id=published["item_id"], operation=published["operation"], run=detail(run, runs_root)
     )
+
+
+@router.post("/{run_id}/report/validate", response_model=ReportValidateResponse)
+def report_validate(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    items: FabricItemsClient = Depends(get_items_client),
+    pbi: PowerBiClient = Depends(get_powerbi_client),
+    user: Principal = Depends(current_user),
+):
+    entry, run = validate_report(store, runs_root, run_id, items_client=items, pbi=pbi, actor=user.upn)
+    return ReportValidateResponse(report=entry, run=detail(run, runs_root))
+
+
+@router.post("/{run_id}/report/repair", response_model=RepairResult)
+def report_repair(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    items: FabricItemsClient = Depends(get_items_client),
+    pbi: PowerBiClient = Depends(get_powerbi_client),
+    user: Principal = Depends(current_user),
+):
+    return repair_model(store, runs_root, run_id, "Report", items_client=items, pbi=pbi, actor=user.upn)
 
 
 @router.get("/{run_id}/report/plan", response_model=ReportPlanResponse)

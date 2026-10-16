@@ -86,7 +86,7 @@ def _materialize(
 
 def _baseline(run_dir: Path, run_id: str, version: int) -> dict[str, float | None]:
     """The measure totals of the latest passing validation of an earlier model version."""
-    for entry in reversed(load_report(run_dir / "ValidationReport.json", run_id).runs):
+    for entry in reversed(load_report(run_dir / "ValidationReport.json", run_id).runs_of("SemanticModel")):
         if entry.passed and entry.artifact_version < version:
             return {
                 c.object.partition(":")[2]: c.evidence.get("value")

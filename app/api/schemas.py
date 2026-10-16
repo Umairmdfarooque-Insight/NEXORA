@@ -121,6 +121,11 @@ class ReportGenerateResponse(BaseModel):
     run: RunDetail
 
 
+class ReportValidateResponse(BaseModel):
+    report: ValidationRun  # this validation run's entry of ValidationReport.json (artifact "Report")
+    run: RunDetail
+
+
 class ModelGenerateResponse(BaseModel):
     version: int
     files: list[str]  # relative to runs/<id>/model/v<version>/
