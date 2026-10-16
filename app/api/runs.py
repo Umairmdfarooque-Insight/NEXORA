@@ -4,7 +4,7 @@ from pathlib import Path
 
 import mimetypes
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import FileResponse
 
 from app.api.deps import (
@@ -13,6 +13,7 @@ from app.api.deps import (
     get_dax_llm,
     get_items_client,
     get_powerbi_client,
+    get_promotion_items_client,
     get_recon_llm,
     get_fabric_client,
     get_feasibility_llm,
@@ -34,6 +35,8 @@ from app.api.schemas import (
     ArtifactItem,
     CompileResponse,
     CreateRunRequest,
+    DeployRequest,
+    DeployResponse,
     DataGapRequest,
     DismissRequest,
     ExceptionRequest,
@@ -117,6 +120,7 @@ from app.workflow.scope import bind_scope
 from app.workflow.source_stage import resolve_sources
 from app.workflow.impact import ImpactReport, read_impact, return_run
 from app.workflow.regenerate_stale import StaleServices, regenerate_stale
+from app.workflow.promotion import Services as PromotionServices, run_deployment, start_deployment
 from app.workflow.states import RunState
 
 router = APIRouter(
@@ -760,3 +764,23 @@ def regenerate_stale_objects(
         actor=user.upn,
     )
     return RegenerateStaleResponse(**result.model_dump(), run=detail(run, runs_root))
+
+
+@router.post("/{run_id}/deploy", status_code=202, response_model=DeployResponse)
+def deploy(
+    run_id: str,
+    body: DeployRequest,
+    background: BackgroundTasks,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    items: FabricItemsClient = Depends(get_promotion_items_client),
+    pbi: PowerBiClient = Depends(get_powerbi_client),
+    fabric: FabricApiClient = Depends(get_fabric_client),
+    user: Principal = Depends(current_user),
+):
+    """Gate G6 and the hash check run now (a refusal is an error response); the deployment itself runs in
+    the background and its progress is in `GET /runs/{id}` (state and `deployment`)."""
+    services = PromotionServices(items=items, pbi=pbi, workspaces=fabric.list_workspaces)
+    started = start_deployment(store, runs_root, run_id, body.target_workspace_id, services, user.upn)
+    background.add_task(run_deployment, store, runs_root, run_id, started, services, user.upn)
+    return DeployResponse(deployment_id=started.deployment_id)

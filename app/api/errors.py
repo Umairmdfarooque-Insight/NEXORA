@@ -56,6 +56,7 @@ from app.workflow.report_stage import ReportPlanInvalid
 from app.workflow.report_review import RegenerationOutOfScope
 from app.workflow.plan_review import PlanEditInvalid
 from app.workflow.scope import SchemaNotFound, ScopeLocked
+from app.workflow.promotion import HashMismatch, TargetBusy
 from app.workflow.scope_guard import ScopeViolation
 from app.workflow.stale import StaleArtifacts
 
@@ -219,6 +220,14 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StaleArtifacts)
     async def stale_artifacts(request: Request, exc: StaleArtifacts):
         return error_response(409, "STALE_ARTIFACTS", str(exc), {"stale": exc.names})
+
+    @app.exception_handler(HashMismatch)
+    async def hash_mismatch(request: Request, exc: HashMismatch):
+        return error_response(409, "HASH_MISMATCH", str(exc), {"artifact": exc.artifact, "approved_hash": exc.expected, "actual_hash": exc.actual})
+
+    @app.exception_handler(TargetBusy)
+    async def target_busy(request: Request, exc: TargetBusy):
+        return error_response(409, "TARGET_BUSY", str(exc), {"workspace_id": exc.workspace_id})
 
     @app.exception_handler(ScopeViolation)
     async def scope_violation(request: Request, exc: ScopeViolation):

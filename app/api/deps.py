@@ -74,6 +74,14 @@ def get_report_services(token: str = Depends(user_token)) -> ReportServices:
     )
 
 
+def get_promotion_items_client(
+    token: str = Depends(user_token), msal_app=Depends(get_msal_app)
+) -> FabricItemsClient:
+    """The one Fabric items client that may leave the sandbox guard: only the promotion service (T-702)
+    uses it, and only after Gate G6 has passed. It acts as the signed-in user (OBO)."""
+    return FabricItemsClient(token_provider=obo_token_provider(msal_app, token, FABRIC_SCOPE), allow_any_workspace=True)
+
+
 def get_bridge_llm() -> BridgeLlm:
     return default_bridge_llm()
 

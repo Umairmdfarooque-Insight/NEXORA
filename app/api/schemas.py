@@ -363,6 +363,14 @@ class ReturnRequest(BaseModel):
     reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
+class DeployRequest(BaseModel):
+    target_workspace_id: Guid
+
+
+class DeployResponse(BaseModel):
+    deployment_id: str
+
+
 class RegenerateStaleResponse(BaseModel):
     regenerated: list[Regenerated]
     validation: list[ValidationSummary]

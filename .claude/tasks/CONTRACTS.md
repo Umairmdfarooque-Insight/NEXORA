@@ -77,6 +77,10 @@ These are the states from spec §11. Only these transitions are allowed. Anythin
 
 `CREATED` doubles as "requirement draft without blocking questions". The spec has no separate state for it.
 
+## Deployment record (T-702)
+
+`RunManifest.deployment`, set when a deployment starts: `deployment_id`, `target_workspace_id`, `started_at`, `finished_at`, `items` (`type`, `item_id`, `hash` = the approved artifact hash, `operation`), `backup_path` (`deploy/backup-<ts>/`, relative to the run folder), `smoke_tests` (`id`, `status` `pass`/`warning`/`fail`, `message`), `outcome` (`completed` | `rolled_back` | `rollback_failed`), and on a failure `error` and `rollback` (`item`, `type`, `action`, `status`). The final release approval is an approval record with artifact `Release`, role `release_approver` and the hash of the approved model and report hashes together.
+
 ## Return log and impact (T-701)
 
 `runs/<run_id>/returns.jsonl` is append-only, one JSON object per line. A `returned` event records a return to `REQUIREMENT_ANALYSIS` (state `CREATED`), `PLANNING` (`DATA_PROFILED`) or `MODEL` (`PLAN_APPROVED`):
@@ -140,7 +144,7 @@ Every API error uses this body:
 | 401 | `UNAUTHENTICATED`, `TOKEN_EXPIRED` | Missing or invalid token |
 | 403 | `FORBIDDEN`, `CONSENT_REQUIRED`, `TARGET_NOT_ALLOWED` | Authenticated but not allowed |
 | 404 | `RUN_NOT_FOUND`, `NOT_FOUND`, `SCHEMA_NOT_FOUND` | Unknown resource |
-| 409 | `ILLEGAL_TRANSITION`, `WRONG_STATE`, `GATE_FAILED`, `CONTRACT_LOCKED`, `STALE_VERSION`, `SCOPE_LOCKED`, `QUESTION_CONFLICT`, `ALREADY_APPROVED`, `HASH_MISMATCH`, `MAPPING_RULES_REQUIRED`, `NO_FEASIBLE_KPIS`, `NAME_CONFLICT`, `BRIDGE_NOT_APPROVED`, `STALE_ARTIFACTS`, `SCOPE_VIOLATION` | Conflicts with the current state |
+| 409 | `ILLEGAL_TRANSITION`, `WRONG_STATE`, `GATE_FAILED`, `CONTRACT_LOCKED`, `STALE_VERSION`, `SCOPE_LOCKED`, `QUESTION_CONFLICT`, `ALREADY_APPROVED`, `HASH_MISMATCH`, `MAPPING_RULES_REQUIRED`, `NO_FEASIBLE_KPIS`, `NAME_CONFLICT`, `BRIDGE_NOT_APPROVED`, `STALE_ARTIFACTS`, `SCOPE_VIOLATION`, `TARGET_BUSY` | Conflicts with the current state |
 | 422 | `VALIDATION_ERROR`, `PROMPT_REJECTED`, `PAYLOAD_REJECTED` | Invalid input, or an LLM payload blocked by the guard (T-705) |
 | 429 | `RATE_LIMITED` | Upstream throttling the caller should retry |
 | 502 | `UPSTREAM_ERROR`, `LLM_INVALID_OUTPUT` | Fabric, Power BI or the LLM returned an error or unusable output |

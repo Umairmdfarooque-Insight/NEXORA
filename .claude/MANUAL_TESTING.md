@@ -661,11 +661,28 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 **Not run by Claude:** steps 1-6, which need your Entra sign-in, the sandbox workspace and live Fabric and the model. Claude ran steps 7 and 8.
 
+### T-702 — Promotion deployment, smoke tests and rollback
+
+**Before you start:** run A from M6/T-701 in `REPORT_APPROVED` (validated, approved by both roles), the API running (`uvicorn app.api.main:app --reload --port 8000`), and a **second workspace** you can access that is **not** the sandbox (call its ID `<target>`; a dev or test workspace on a capacity, where you can create items and the Lakehouse of run A is readable). Put **your own UPN** in `config\roles.yaml` under `release_approver` (restore it afterwards). Calls use Swagger at <http://localhost:8000/docs> (Authorize, see the T-105 section). `<id>` is run A's `run_id`.
+
+1. 🌐 **Gate G6 refuses.** `POST /runs/<id>/deploy` with `{"target_workspace_id": "<target>"}` before any release approval. **Expected:** `409 GATE_FAILED`, `failed_checks` is `["G6.4"]`, nothing in the target. Then with `{"target_workspace_id": "<sandbox id>"}`: **Expected:** `409 GATE_FAILED` with `G6.1` (the target is the sandbox).
+2. 🌐 **Unauthorized target.** `POST /runs/<id>/deploy` with the ID of a workspace you can't access (or a random GUID). **Expected:** `409 GATE_FAILED` with `G6.1` and nothing deployed (the run stays `REPORT_APPROVED`).
+3. 🌐 **Release approval.** `POST /runs/<id>/approvals` with `{"artifact": "Release", "action": "ACCEPT", "expected_hash": "<hash>"}`. The hash is the SHA-256 of `{"PbirReport": <PbirReport hash>, "TMDLModel": <TMDLModel hash>}` (sorted keys, no spaces) from `GET /runs/<id>/artifacts`; if you don't want to compute it, send any value first: **Expected:** `409 STALE_VERSION` with `current_hash`, which you then use. Without the role: `403`. **Expected with the role:** `200`, an approval record with role `release_approver`; repeating it gives `409 ALREADY_APPROVED`.
+4. 🌐 **Promote.** `POST /runs/<id>/deploy` with `{"target_workspace_id": "<target>"}`. **Expected:** `202` with a `deployment_id`; poll `GET /runs/<id>` until the state is `COMPLETED`. `deployment.items` lists the `SemanticModel` and the `Report` with the approved hashes (`operation: created`), `deployment.smoke_tests` has `SMOKE.REFRESH`, one `SMOKE.MEASURE:<name>` per measure and `SMOKE.REPORT`, all `pass`, `outcome` is `completed`, and `runs\<id>\deploy\backup-<ts>\backup.json` exists. In the target workspace `Nexora_<first 8 characters>` and `Nexora_<first 8 characters>_Report` exist and the report opens on the target's model. `runs\<id>\gates\G6-<ts>.json` shows G6.1-G6.4 passed.
+5. 🌐 **Rollback.** On a second `REPORT_APPROVED` run with a release approval, make a smoke test fail, for example remove the target workspace's access to run A's Lakehouse (or deploy to a workspace whose capacity is paused). Deploy. **Expected:** the run ends `ROLLED_BACK` with `deployment.outcome: rolled_back`, `deployment.error` names the failure and `deployment.smoke_tests` shows the failing test; a new model/report was deleted from the target, and a model/report that existed before is back to its previous definition (compare with `deploy\backup-<ts>\`). Fix the cause and deploy again: **Expected:** `202` and `COMPLETED`.
+6. 🌐 **Hash enforced.** On another approved run with a release approval, add a line to `runs\<id>\model\v<n>\definition\tables\<Table>.tmdl` (the approved version folder), then deploy. **Expected:** `409 HASH_MISMATCH` with `details.artifact` `TMDLModel`, nothing deployed, the run still `REPORT_APPROVED`. Undo the edit.
+7. 🌐 **Target busy.** While one deployment to `<target>` runs (or after creating `runs\.locks\<target in lower case>.lock` by hand), deploy another run there. **Expected:** `409 TARGET_BUSY`. Delete the lock file afterwards.
+8. 💻 **Offline checks.** `python -m app.manual_tests.t702_offline_checks`. **Expected:** `All checks passed.` (the release approval and its roles, G6.1-G6.4, the hash check, the lock and a stale lock, the backup, a completed promotion with its manifest and smoke tests, rollback of a new deployment, rollback to the previous definitions when the report fails, a failing rollback, blank and failing measures, and the new Fabric client calls).
+9. 💻 **Earlier checks still pass.** `python -m app.manual_tests.t501_offline_checks` and `python -m app.manual_tests.t701_offline_checks`. **Expected:** `All checks passed.` for each.
+10. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API, delete the test items from `<target>` and the sandbox, the test runs' folders under `runs\` and `runs\.locks\`.
+
+**Not run by Claude:** steps 1-7, which need your Entra sign-in and live Fabric workspaces. Claude ran steps 8 and 9.
+
 ---
 
 ## Next tasks
 
-Sections for T-702 and later are added when each task is implemented.
+Sections for T-703 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -705,6 +722,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t603_offline_checks.py` | T-603 | Fake-Fabric and Power BI checks of G5, `report/validate` and `report/repair` |
 | `app/manual_tests/t604_offline_checks.py` | T-604 | Checks of the report review data, the file endpoint, the role approvals of the Report and regenerating a visual or page |
 | `app/manual_tests/t701_offline_checks.py` | T-701 | Fake-service checks of returning a run, object-level impact, stale marking and its guards, and targeted regeneration |
+| `app/manual_tests/t702_offline_checks.py` | T-702 | Fake-Fabric and Power BI checks of the release approval, Gate G6, the lock, smoke tests, completion and rollback |
 
 ## Adding a task
 
