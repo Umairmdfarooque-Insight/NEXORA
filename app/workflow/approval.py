@@ -206,6 +206,10 @@ def _perform(
         if action is not Action.ACCEPT:
             raise UnsupportedAction(artifact, action)
         return accept_inventory(store, runs_root, run_id, user, expected_hash, comment)
+    if artifact == "Release":
+        from app.workflow.promotion import decide_release  # avoids a circular import
+
+        return decide_release(store, runs_root, run_id, action, user, expected_hash, comment)
     if artifact == "ExecutionPlan":
         from app.workflow.plan_review import decide_plan  # avoids a circular import
 

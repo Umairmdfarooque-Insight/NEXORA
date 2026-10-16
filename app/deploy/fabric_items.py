@@ -343,3 +343,39 @@ class FabricItemsClient:
             except (TypeError, ValueError):
                 wait = DEFAULT_POLL_WAIT
             self._sleep(min(max(wait, 1), MAX_RETRY_WAIT, remaining))
+
+    # --- promotion (T-702): back up, restore and delete -----------------------------------------------
+
+    def get_definition(self, workspace_id: str, item_id: str, collection: str) -> list[dict]:
+        """The definition parts of an item (`semanticModels` or `reports`), for a backup. A report is asked
+        for in PBIR format."""
+        self._check_target(workspace_id)
+        url = f"{FABRIC_API}/workspaces/{workspace_id}/{collection}/{item_id}/getDefinition"
+        if collection == "reports":
+            url += "?format=PBIR"
+        response = self._call("POST", url, {})
+        body = _body(response)
+        if response.status_code == 202:
+            location = response.headers.get("Location")
+            if not location:
+                raise FabricUpstreamError("Fabric accepted getDefinition without an operation location", _request_id(response))
+            self.wait_for_operation(location)
+            body = _body(self._call("GET", location.rstrip("/") + "/result"))
+        parts = (body.get("definition") or {}).get("parts")
+        if not isinstance(parts, list) or not parts:
+            raise FabricUpstreamError("Fabric returned no definition for the item", _request_id(response))
+        return parts
+
+    def update_definition(self, workspace_id: str, item_id: str, collection: str, parts: list[dict], fmt: str | None = None) -> None:
+        """Replace an item's definition with `parts` (as returned by get_definition): a restore."""
+        self._check_target(workspace_id)
+        definition: dict = {"parts": parts}
+        if fmt:
+            definition["format"] = fmt
+        response = self._call("POST", f"{FABRIC_API}/workspaces/{workspace_id}/{collection}/{item_id}/updateDefinition", {"definition": definition})
+        self._finish(response)
+
+    def delete_item(self, workspace_id: str, item_id: str) -> None:
+        """Delete an item: the rollback of an item the deployment created."""
+        self._check_target(workspace_id)
+        self._call("DELETE", f"{FABRIC_API}/workspaces/{workspace_id}/items/{item_id}")
