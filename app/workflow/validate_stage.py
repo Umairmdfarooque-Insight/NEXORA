@@ -145,7 +145,7 @@ def run_validation(
     entry = ValidationRun(
         artifact_version=version,
         artifact_hash=digest,
-        attempt=len(report.runs) + 1,
+        attempt=len(report.runs_of("SemanticModel")) + 1,
         started_at=started,
         passed=not any(c.status == "fail" for c in checks),
         repair_attempt=repair_attempt,
@@ -168,7 +168,7 @@ def register_report(store: RunStore, runs_root: Path, run_id: str, entry: Valida
         version=entry.attempt,
         hash=canonical_hash(data),
         status="passed" if entry.passed else "failed",
-        based_on={TMDL_ARTIFACT: entry.artifact_hash},
+        based_on={(TMDL_ARTIFACT if entry.artifact == "SemanticModel" else "PbirReport"): entry.artifact_hash},
         updated_at=utc_now(),
     )
     store.save(run)

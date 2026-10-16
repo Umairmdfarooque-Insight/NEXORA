@@ -155,7 +155,7 @@ def role_statuses(records: list[ApprovalRecord], roles: list[str], live_hash: st
 
 def _latest_validation(runs_root: Path, run_id: str) -> ValidationRun | None:
     report = load_report(Path(runs_root) / run_id / REPORT_FILE, run_id)
-    return report.runs[-1] if report.runs else None
+    return report.latest("SemanticModel")
 
 
 def _reconciliation(latest: ValidationRun | None, name: str) -> Reconciliation:

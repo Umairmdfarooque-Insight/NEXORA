@@ -1,6 +1,7 @@
 """ValidationReport.json (spec §10, CONTRACTS.md#validation-report): one entry per validation run.
 
-Written by the model validation stage (T-504); T-505 reads it and sets `classification`.
+Written by the model validation stage (T-504) and the report validation stage (T-603), which share the
+file: a run of `artifact` "Report" is in the same list. T-505 reads it and sets `classification`.
 """
 
 import hashlib
@@ -45,6 +46,14 @@ class ValidationReport(_Strict):
     schema_version: int = SCHEMA_VERSION
     run_id: str
     runs: list[ValidationRun] = Field(default_factory=list)
+
+    def runs_of(self, artifact: str) -> list[ValidationRun]:
+        """The validation runs of one artifact ("SemanticModel" or "Report"), oldest first."""
+        return [r for r in self.runs if r.artifact == artifact]
+
+    def latest(self, artifact: str) -> ValidationRun | None:
+        runs = self.runs_of(artifact)
+        return runs[-1] if runs else None
 
 
 _GUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")

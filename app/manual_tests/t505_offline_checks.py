@@ -39,6 +39,7 @@ from app.manual_tests import t504_offline_checks as t504
 from app.repair.model_adapter import read_tree
 from app.repair.policy import load_policy, missing_column, repair_code
 from app.repair.service import UnsupportedArtifact, repair
+from app.workflow.compile_stage import WrongState
 from app.store.file_store import FileRunStore
 from app.workflow.harvest_stage import canonical_hash, write_json
 from app.workflow.run import ArtifactRef, RunScope, utc_now
@@ -356,7 +357,9 @@ def main() -> None:
             raised = None
         except UnsupportedArtifact as exc:
             raised = exc
-        check("the report artifact has no adapter yet", raised is not None and "Report" in str(raised))
+        except WrongState as exc:  # T-603 added the Report adapter: it only repairs a run in REPORT_FAILED
+            raised = exc
+        check("a report is repaired only in REPORT_FAILED (T-603): another state is a WrongState", isinstance(raised, WrongState) and "REPORT_FAILED" in str(raised))
         check("unknown run: 404", envelope(do_repair("nope"), 404, "RUN_NOT_FOUND"))
         app.dependency_overrides.clear()
 

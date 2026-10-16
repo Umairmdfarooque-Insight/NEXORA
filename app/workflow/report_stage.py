@@ -16,13 +16,13 @@ from app.contracts.model_plan import ModelSpec, load_yaml, to_data as spec_data
 from app.contracts.report_plan import ReportPlan
 from app.deploy.fabric_items import SEMANTIC_MODEL, FabricItemsClient, get_sandbox_workspace_id
 from app.fsutil import replace_file
-from app.report.pbir_generator import PbirGenerationError, check_pbir, generate_pbir
+from app.report.pbir_generator import PbirGenerationError, check_pbir, folder_digest, generate_pbir
 from app.report.plan_validation import failures, validate_report_plan
 from app.store.base import RunStore
 from app.workflow.clarification import NotFound, StaleVersion
 from app.workflow.compile_stage import WrongState
 from app.workflow.harvest_stage import canonical_hash, write_json
-from app.workflow.model_stage import TMDL_ARTIFACT, folder_hash
+from app.workflow.model_stage import TMDL_ARTIFACT
 from app.workflow.plan_stage import MODEL_ARTIFACT, MODEL_FILE
 from app.workflow.report_plan_stage import ARTIFACT as PLAN_ARTIFACT
 from app.workflow.report_plan_stage import CURRENT as PLAN_FILE
@@ -108,7 +108,7 @@ def generate_report(
         if problems:
             raise ReportPlanInvalid("The generated report fails the PBIR checks: " + "; ".join(problems[:10]))
         files = [p.relative_to(staging).as_posix() for p in paths]
-        digest = folder_hash(staging)
+        digest = folder_digest(staging)
         published = items_client.upsert_report(workspace_id, report_name(run_id), staging)
         replace_file(staging, report_root / f"v{version}")
     finally:

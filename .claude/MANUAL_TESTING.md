@@ -594,7 +594,7 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 1. 🌐 **Visible report.** `POST /runs/{run_A}/report/generate`. **Expected:** `200` with `version: 1`, `operation: "created"`, a `report_item_id`, and the files (`definition.pbir`, `definition/report.json`, `definition/version.json`, `definition/pages/pages.json`, `definition/pages/p1/page.json`, `definition/pages/p1/visuals/v1/visual.json`, …). The run is now `REPORT_GENERATING`. In the sandbox workspace the report `Nexora_<first 8 characters>_Report` exists; open it: the pages, titles and visuals match `ReportPlan.json`, the visuals show data (the first load can take a moment), and the page filter (2024) is applied in the filters pane.
 2. 🌐 **Drill works.** On "Net Revenue by Month" (a line chart on the Calendar hierarchy) use the drill-down arrow. **Expected:** the chart goes Year → Quarter → Month, as the plan describes.
-3. 💻 **Deterministic.** Call `POST /runs/{run_A}/report/generate` again, then compare the folders: `git diff --no-index --stat runs/<run_A>/report/v1 runs/<run_A>/report/v2`. **Expected:** no difference (the run stays `REPORT_GENERATING`).
+3. 💻 **Deterministic.** Call `POST /runs/{run_A}/report/generate` again, then compare the folders: `git diff --no-index --stat runs/<run_A>/report/v1 runs/<run_A>/report/v2`. **Expected:** no difference (the run stays `REPORT_GENERATING`). If you have validated the report in between (T-603), ignore the `renders` folder, which validation adds to a version and which is not part of the report.
 4. 🌐 **No duplicate.** After step 3. **Expected:** the second response has `operation: "updated"` and the same `report_item_id`; the workspace still has one report with that name.
 5. 🌐 **Rebinding.** Note the model's item id from `runs\<run_A>\ReportPublish.json` (`semantic_model_item_id`). Delete the model `Nexora_<first 8 characters>` in the workspace and deploy it again (`python -m app.cli deploy model runs\<run_A>\model\v<n> --name Nexora_<first 8 characters>`), then generate again. **Expected:** `definition.pbir` of the new version carries the new model's id (`semanticmodelid=…`) and the report opens on the new model.
 6. 💻 **Errors.** In `runs\<run_A>\ReportPlan.json` change a visual's `"type"` to `"pieChart"`: `POST …/report/generate` gives `422 VALIDATION_ERROR` naming `v1` and listing the allowed types, with nothing published. A wrong state gives `409 WRONG_STATE`; no plan `404`; the model missing from the sandbox `404`; a Fabric rejection `502 UPSTREAM_ERROR` with Fabric's message and no new `report\v<n>` folder. Restore the plan from `runs\<run_A>\reports\ReportPlan.v1.json` afterwards.
@@ -603,11 +603,25 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 **Not run by Claude:** the live steps (1, 2, 4, 5 and the Fabric error in 6), which need your sign-in and the sandbox workspace. Claude ran step 7. The generated files follow Microsoft's published PBIR schemas, but nothing here validates them against the live JSON schemas: if Fabric or Power BI rejects a file, the message names it, and the generator (`app/report/pbir_generator.py`) is what to fix. Two details were written from Microsoft's examples and may need adjusting on first contact: `visualInteractions` in `page.json` and the visual title under `visualContainerObjects`.
 
+### T-603 — Report validators and Gate G5
+
+**Before you start:** run A from T-602 in `REPORT_GENERATING` (the report generated and published, the model `Nexora_<first 8 characters>` in the sandbox), the API running, and the Power BI delegated permission `Dataset.ReadWrite.All` granted as for T-504. The page export needs a **Fabric or Premium capacity** (a trial capacity works): without one `G5.RENDER` is a warning, not a pass.
+
+1. 🌐 **Passing report.** `POST /runs/{run_A}/report/validate`. **Expected:** `200`, `report.passed: true`, `G5.SCHEMA` pass, one `G5.BIND` and one `G5.QUERY` pass per visual (a `no data` warning is possible if a visual returns no rows), and one `G5.RENDER` pass per page; `runs\<run_A>\report\v<n>\renders\<page>.png` exists for each page (open one: it shows the page as Power BI renders it). The run stays `REPORT_GENERATING`. Each `G5.QUERY` check has the DAX it ran in `evidence.query`.
+2. 🌐 **Binding failure repaired narrowly.** Stop at the current version `v<n>`. In `runs\<run_A>\report\v<n>\definition\pages\p1\visuals\v1\visual.json` change `"Net Revenue"` (in the Y projection and its `queryRef`) to `"Net Revenue X"`, then `POST /runs/{run_A}/report/validate`. **Expected:** `report.passed: false`, `G5.BIND` fails for `visual:v1` naming `Net Revenue X` (`evidence.defect: "report"`), that visual's `G5.QUERY` and the page's `G5.RENDER` are `skipped`, and the run is `REPORT_FAILED`. Then `POST /runs/{run_A}/report/repair`. **Expected:** `outcome: "passed"`, `final_state: "REPORT_GENERATING"`, one attempt; `report\v<n+1>` exists and differs from `v<n>` only in `definition\pages\p1\visuals\v1\visual.json` (`git diff --no-index --stat runs/<run_A>/report/v<n> runs/<run_A>/report/v<n+1>`, ignoring `renders`), the report in the workspace shows the visual again, and a validation entry with `repair_attempt: 1` passed. This is the "Report binding failure" scenario.
+3. 🌐 **Model defect routed back.** Break a measure in the **deployed** model (open `Nexora_<first 8 characters>` in the workspace's web modeling view and change `Net Revenue`'s DAX to something invalid such as `SUM(Sales[Nope])`). Then `POST /runs/{run_A}/report/validate`. **Expected:** `G5.QUERY` fails for the visuals using it with `evidence.defect: "model"` and the engine's message, the run is `MODEL_GENERATING` (`GET /runs/{run_A}`: the history shows `REPORT_FAILED` then `MODEL_GENERATING` with "Model defect found by report validation: …"), `ValidationReport.json` has a failed `G4.DAX` entry for the model (`REPORT_QUERY_FAILED`), and `GET /runs/{run_A}/model/review` shows Gate G4 not passed until you validate the model again. No new `report\v<n>` is written. Restore the measure by validating the model (`POST /runs/{run_A}/model/validate`), which redeploys it.
+4. 🌐 **Export unavailable.** On a workspace without capacity (or by temporarily using a run whose workspace isn't on one), validate. **Expected:** `G5.RENDER` is a `warning` "export unavailable: …" (no PNGs), the other checks decide, and `report.passed` can still be `true`.
+5. 💻 **Errors.** Validate or repair in another state gives `409 WRONG_STATE`; validate before `report/generate` gives `404`; the model missing from the sandbox gives `404`; repair with no failed check gives `409 WRONG_STATE` "Nothing to repair"; a defect outside one visual or page (for example deleting `definition\version.json`) fails `G5.SCHEMA` on `report`, and repair escalates it (`user_input_only`, `NEEDS_INPUT`, resume `REPORT_FAILED`).
+6. 💻 **Offline checks.** `python -m app.manual_tests.t603_offline_checks`. **Expected:** `All checks passed.` (the four checks, the queries built per visual, the warnings, the narrow repair, the model defect route, escalation and the error cases).
+7. 💻 **Clean up.** Delete the report and the model from the sandbox workspace and the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1-4), which need your sign-in, the sandbox workspace and Power BI. Claude ran steps 5 and 6 offline with fakes for Fabric and Power BI. The `ExportTo` calls follow Microsoft's documented API (one page per export, then poll and download) and weren't tried against a capacity.
+
 ---
 
 ## Next tasks
 
-Sections for T-603 and later are added when each task is implemented.
+Sections for T-604 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -644,6 +658,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t507_offline_checks.py` | T-507 | Checks of the model review data, the role approvals of the SemanticModel and the move to MODEL_APPROVED |
 | `app/manual_tests/t601_offline_checks.py` | T-601 | Fake-LLM checks of the report questions, RPLAN.1-RPLAN.7, the planner and `report/plan` |
 | `app/manual_tests/t602_offline_checks.py` | T-602 | Fake-Fabric checks of the PBIR generator, `upsert_report` and `report/generate` |
+| `app/manual_tests/t603_offline_checks.py` | T-603 | Fake-Fabric and Power BI checks of G5, `report/validate` and `report/repair` |
 
 ## Adding a task
 

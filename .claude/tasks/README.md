@@ -76,7 +76,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-507 | Model review and approval UI | M5 | Done | task/T-507-model-review-approval-ui |
 | T-601 | Report planner | [M6 Report](M6-report.md) | Done | task/T-601-report-planner |
 | T-602 | PBIR generator and sandbox publish | M6 | Done | task/T-602-pbir-generator-sandbox-publish |
-| T-603 | Report validators and Gate G5 | M6 | Not started |  |
+| T-603 | Report validators and Gate G5 | M6 | Done | task/T-603-report-validators-gate-g5 |
 | T-604 | Report review and approval UI | M6 | Not started |  |
 | T-701 | Impact analysis and stale marking | [M7 Operational controls](M7-operational-controls.md) | Not started |  |
 | T-702 | Promotion deployment, smoke tests and rollback | M7 | Not started |  |
