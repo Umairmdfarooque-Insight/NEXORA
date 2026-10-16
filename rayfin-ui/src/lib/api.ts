@@ -13,6 +13,7 @@ import type {
   Lakehouse,
   Me,
   ModelReview,
+  ReportReview,
   MetadataInventory,
   PlanEditResult,
   PlanOp,
@@ -150,6 +151,20 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return (await response.json()) as T;
 }
 
+/** A file of the run (a page render), fetched with the sign-in token, as a Blob to show. */
+export async function fetchRunFile(path: string): Promise<Blob> {
+  let response = await fetchOnce(path, undefined, false);
+  let error = response.ok ? null : await readError(response);
+  if (error?.code === "TOKEN_EXPIRED" && tokenProvider) {
+    response = await fetchOnce(path, undefined, true);
+    error = response.ok ? null : await readError(response);
+  }
+  if (error) {
+    throw error;
+  }
+  return await response.blob();
+}
+
 export const api = {
   listRuns: () => apiFetch<RunList>("/runs?limit=200"),
   getRun: (id: string) => apiFetch<RunDetail>(`/runs/${encodeURIComponent(id)}`),
@@ -235,6 +250,11 @@ export const api = {
   getModelReview: (id: string) => apiFetch<ModelReview>(`/runs/${encodeURIComponent(id)}/model/review`),
   validateModel: (id: string) =>
     apiFetch<{ report: ValidationRun; run: RunDetail }>(`/runs/${encodeURIComponent(id)}/model/validate`, {
+      method: "POST",
+    }),
+  getReportReview: (id: string) => apiFetch<ReportReview>(`/runs/${encodeURIComponent(id)}/report/review`),
+  validateReport: (id: string) =>
+    apiFetch<{ report: ValidationRun; run: RunDetail }>(`/runs/${encodeURIComponent(id)}/report/validate`, {
       method: "POST",
     }),
   listWorkspaces: () => apiFetch<Workspace[]>("/fabric/workspaces"),

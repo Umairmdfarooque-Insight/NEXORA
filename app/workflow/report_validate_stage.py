@@ -181,6 +181,12 @@ def validate_report(
         raise NotFound("The report hasn't been generated yet: POST /runs/{id}/report/generate first")
     env = ReportEnvironment(store, runs_root, run_id)
     entry = run_report_validation(env, run_dir / ref.path, ref.version, ref.hash, items_client=items_client, pbi=pbi)
+    return entry, settle(store, runs_root, run_id, entry, actor)
+
+
+def settle(store: RunStore, runs_root: Path, run_id: str, entry: ValidationRun, actor: str = "system") -> Run:
+    """Register the validation entry and move the run by its result: a pass keeps REPORT_GENERATING,
+    a failure moves to REPORT_FAILED, and a model defect goes on to MODEL_GENERATING."""
     register_report(store, runs_root, run_id, entry)
     run = store.get(run_id)
     if not entry.passed:
@@ -188,4 +194,4 @@ def validate_report(
         run = store.transition(run_id, RunState.REPORT_FAILED, f"Report validation failed: {failed} check(s)", actor)
         if model_defects(entry):
             run = route_model_defects(store, runs_root, run_id, entry, actor)
-    return entry, run
+    return run

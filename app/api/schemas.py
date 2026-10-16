@@ -220,6 +220,7 @@ class ApprovalRequest(BaseModel):
     expected_hash: str
     role: str | None = None  # the role the user acts as, for the SemanticModel (T-507)
     definition_wrong: bool = False  # a business_owner's Reject says the KPI definition itself is wrong
+    target: dict[str, str] | None = None  # the page and/or visual of a REGENERATE of the Report (T-604)
 
     @model_validator(mode="after")
     def _action_rules(self) -> "ApprovalRequest":
@@ -227,6 +228,11 @@ class ApprovalRequest(BaseModel):
             raise ValueError("a comment is required to reject")
         if self.action is Action.EDIT and not (self.edits and self.edits.kpis):
             raise ValueError("edits.kpis is required for an edit")
+        if self.action is Action.REGENERATE and self.artifact == "Report":
+            if not (self.target and (self.target.get("page") or self.target.get("visual")) and set(self.target) <= {"page", "visual"}):
+                raise ValueError("target is required to regenerate: {\"page\": …, \"visual\": …} with at least one of them")
+            if not self.comment:
+                raise ValueError("a comment (the guidance) is required to regenerate")
         return self
 
 

@@ -53,6 +53,7 @@ from app.workflow.bridge_model_stage import BridgeNotApproved
 from app.workflow.model_review import InvalidRole
 from app.workflow.model_stage import ModelSpecInvalid
 from app.workflow.report_stage import ReportPlanInvalid
+from app.workflow.report_review import RegenerationOutOfScope
 from app.workflow.plan_review import PlanEditInvalid
 from app.workflow.scope import SchemaNotFound, ScopeLocked
 
@@ -208,6 +209,10 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"failed_checks": [c.model_dump(mode="json") for c in exc.failed]},
         )
+
+    @app.exception_handler(RegenerationOutOfScope)
+    async def regeneration_out_of_scope(request: Request, exc: RegenerationOutOfScope):
+        return error_response(409, "SCOPE_VIOLATION", str(exc))
 
     @app.exception_handler(ReportPlanInvalid)
     async def report_plan_invalid(request: Request, exc: ReportPlanInvalid):
