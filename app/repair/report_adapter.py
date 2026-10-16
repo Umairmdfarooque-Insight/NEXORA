@@ -112,21 +112,41 @@ class ReportRepairAdapter:
             self.notes.append(f"the plan itself can't be generated: {exc}")
             return
         for e in sorted(wanted, key=lambda e: e.object):
-            kind, _, name = e.object.partition(":")
-            if kind == "visual":
-                rel = next((r for r in files if r.endswith(f"/visuals/{name}/visual.json")), None)
-            elif kind == "page":
-                rel = f"definition/pages/{name}/page.json" if f"definition/pages/{name}/page.json" in files else None
-            else:
-                rel = None
-            if rel is None:
-                self.notes.append(f"{e.object}: not in the report plan, so it can't be regenerated")
-                continue
+            self._write_object(e.object, files)
+
+    @staticmethod
+    def _rel_of(obj: str, files: dict) -> str | None:
+        kind, _, name = obj.partition(":")
+        if kind == "visual":
+            return next((r for r in files if r.endswith(f"/visuals/{name}/visual.json")), None)
+        if kind == "page":
+            return f"definition/pages/{name}/page.json" if f"definition/pages/{name}/page.json" in files else None
+        return None
+
+    def _write_object(self, obj: str, files: dict) -> bool:
+        rel = self._rel_of(obj, files)
+        if rel is None:
+            self.notes.append(f"{obj}: not in the report plan, so it can't be regenerated")
+            return False
+        self._stage()
+        target = self.staging / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(file_bytes(files[rel]))
+        self.touched.add(obj)
+        return True
+
+    def regenerate(self, objects: list[str], prune_pages: list[str] | None = None) -> None:
+        """Write the files of `objects` (`visual:<id>`, `page:<name>`) from the current plan into the
+        staging copy, for a reviewer's regeneration. Visual folders of `prune_pages` that the plan no
+        longer has are removed. Raises PbirGenerationError if the plan can't be generated."""
+        files = build_files(self.plan, self._model_id(), self.env.spec)
+        for obj in objects:
+            self._write_object(obj, files)
+        for page in prune_pages or []:
             self._stage()
-            target = self.staging / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(file_bytes(files[rel]))
-            self.touched.add(e.object)
+            for folder in sorted((self.staging / "definition" / "pages" / page / "visuals").glob("*")):
+                if f"definition/pages/{page}/visuals/{folder.name}/visual.json" not in files:
+                    shutil.rmtree(folder)
 
     def llm_fix(self, llm: Any, errors: list[ClassifiedError]) -> None:
         for e in errors:
@@ -163,7 +183,7 @@ class ReportRepairAdapter:
 
     # -- keeping and validating an attempt -------------------------------------------------------
 
-    def validate(self, repair_attempt: int) -> ValidationRun:
+    def validate(self, repair_attempt: int | None) -> ValidationRun:
         """Keep the staged copy as the next version, publish it and validate it."""
         root = Path(self.env.run_dir) / REPORT_DIR
         self.version = _next_version(root)

@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
+import mimetypes
+
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 
 from app.api.deps import (
     get_connector_factory,
@@ -16,6 +19,7 @@ from app.api.deps import (
     get_llm,
     get_relationship_llm,
     get_report_llm,
+    get_report_services,
     get_runs_root,
     get_source_llm,
     get_sql_connector_factory,
@@ -93,6 +97,7 @@ from app.report.planner import LlmCall as ReportLlm
 from app.workflow.report_plan_stage import generate_report_plan, read_report_plan
 from app.workflow.report_stage import generate_report
 from app.workflow.report_validate_stage import validate_report
+from app.workflow.report_review import ReportReview, ReportServices, review as review_report
 from app.connectors.powerbi_api import PowerBiClient
 from app.deploy.fabric_items import FabricItemsClient
 from app.model.recon_sql import LlmCall as ReconLlm
@@ -255,6 +260,7 @@ def approve(
     store: RunStore = Depends(get_store),
     runs_root: Path = Depends(get_runs_root),
     llm=Depends(get_llm),
+    report_services: ReportServices = Depends(get_report_services),
     user: Principal = Depends(current_user),
 ):
     outcome = perform(
@@ -270,6 +276,8 @@ def approve(
         llm=llm,
         role=body.role,
         definition_wrong=body.definition_wrong,
+        target=body.target,
+        report_services=report_services,
     )
     return ApprovalResponse(
         approval=outcome.approval,
@@ -614,6 +622,35 @@ def report_plan_read(
 ):
     plan, validation = read_report_plan(store, runs_root, run_id)
     return ReportPlanResponse(plan=plan, validation=validation)
+
+
+@router.get("/{run_id}/report/review", response_model=ReportReview)
+def report_review(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    return review_report(store, runs_root, run_id)
+
+
+@router.get("/{run_id}/files/{path:path}")
+def run_file(
+    run_id: str,
+    path: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    """A file inside the run's own folder (the page renders, for example). Anything that resolves
+    outside `runs/<id>/` is a 404, as is anything that isn't a file."""
+    store.get(run_id)  # 404 for an unknown run
+    root = (Path(runs_root) / run_id).resolve()
+    candidate = Path(path)
+    if not path or candidate.is_absolute() or ".." in candidate.parts or "\\" in path or ":" in path:
+        raise NotFound("No such file")
+    target = (root / candidate).resolve()
+    if root not in target.parents or not target.is_file():
+        raise NotFound("No such file")
+    return FileResponse(target, media_type=mimetypes.guess_type(target.name)[0] or "application/octet-stream", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/{run_id}/model/review", response_model=ModelReview)

@@ -166,11 +166,12 @@ export interface Explanation {
 }
 
 export interface ApprovalBody {
-  artifact: "BusinessContract" | "MetadataInventory" | "ExecutionPlan" | "SemanticModel";
+  artifact: "BusinessContract" | "MetadataInventory" | "ExecutionPlan" | "SemanticModel" | "Report";
   action: ApprovalAction;
   expected_hash: string;
+  target?: { page?: string; visual?: string }; // the part to regenerate, for the Report (T-604)
   comment?: string;
-  role?: string; // the role acted as, for the SemanticModel
+  role?: string; // the role acted as, for the SemanticModel and the Report
   definition_wrong?: boolean; // a business_owner's Reject of the KPI definition itself
   edits?: { kpis: Record<string, KpiChanges> };
 }
@@ -536,4 +537,48 @@ export interface ModelReview {
   approvals_required: string[];
   approvals_status: RoleStatus[];
   approvals_done: ModelApproval[];
+}
+
+// --- Report review (T-604) ---
+
+export type CheckStatus = "pass" | "fail" | "warning" | "skipped" | "not_validated";
+
+export interface ReportVisualReview {
+  id: string;
+  title: string;
+  type: string | null;
+  questions: { id: string; text: string }[];
+  bind_status: CheckStatus;
+  query_status: CheckStatus;
+  messages: string[];
+}
+
+export interface ReportPageReview {
+  name: string; // the page's name in the report (p1, p2, ...)
+  display_name: string | null;
+  image_url: string | null; // an API path, fetched with the token; null when the page wasn't rendered
+  render_status: CheckStatus;
+  render_message: string | null;
+  open_url: string | null;
+  visuals: ReportVisualReview[];
+}
+
+export interface ReportApproval extends ApprovalRecord {
+  current: boolean;
+  note: string | null;
+  target?: { page?: string; visual?: string } | null;
+}
+
+export interface ReportReview {
+  report_hash: string;
+  version: number;
+  state: string;
+  pages: ReportPageReview[];
+  unanswered_questions: { question_id: string; reason: string }[];
+  validation_report: ValidationRun | null;
+  validation_current: boolean;
+  gate: GateResult;
+  approvals_required: string[];
+  approvals_status: RoleStatus[];
+  approvals_done: ReportApproval[];
 }

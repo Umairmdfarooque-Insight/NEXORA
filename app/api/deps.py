@@ -16,6 +16,7 @@ from app.model.recon_sql import LlmCall as ReconLlm, default_recon_llm
 from app.compiler.requirement_compiler import LlmCall, default_llm
 from app.model.dax_generator import LlmCall as DaxLlm, default_dax_llm
 from app.report.planner import LlmCall as ReportLlm, default_report_llm
+from app.workflow.report_review import ReportServices
 from app.discovery.relationship_candidates import RelationshipLlm, default_relationship_llm
 from app.discovery.source_resolver import SourceLlm, default_source_llm
 from app.config import PROJECT_ROOT
@@ -61,6 +62,16 @@ def get_dax_llm() -> DaxLlm:
 
 def get_report_llm() -> ReportLlm:
     return default_report_llm()
+
+
+def get_report_services(token: str = Depends(user_token)) -> ReportServices:
+    """What regenerating part of a report needs: the model, and sandbox and Power BI clients acting as
+    the signed-in user, built only when a regeneration asks for them."""
+    return ReportServices(
+        llm=default_report_llm(),
+        items=lambda: FabricItemsClient(token_provider=obo_token_provider(get_msal_app(), token, FABRIC_SCOPE)),
+        pbi=lambda: PowerBiClient(token_provider=obo_token_provider(get_msal_app(), token, POWERBI_SCOPE)),
+    )
 
 
 def get_bridge_llm() -> BridgeLlm:

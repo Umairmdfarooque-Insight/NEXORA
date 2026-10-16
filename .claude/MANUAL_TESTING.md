@@ -617,11 +617,27 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 **Not run by Claude:** the live steps (1-4), which need your sign-in, the sandbox workspace and Power BI. Claude ran steps 5 and 6 offline with fakes for Fabric and Power BI. The `ExportTo` calls follow Microsoft's documented API (one page per export, then poll and download) and weren't tried against a capacity.
 
+### T-604 — Report review and approval UI
+
+**Before you start:** run A from T-603 in `REPORT_GENERATING`, validated (`POST /runs/{run_A}/report/validate` passing, PNGs in `report\v<n>\renders\`; without a capacity the pages show the placeholder instead), the API running (`uvicorn app.api.main:app --reload --port 8000`) and the UI (`cd rayfin-ui; npm install; npm run dev`, sign in at <http://localhost:3000>). Put **your own UPN** in `config\roles.yaml` under `project_reviewer` and `business_owner` (restore it afterwards). Open <http://localhost:3000/runs/{run_A}/report>.
+
+1. 🌐 **Review screen.** **Expected:** the summary shows the state, **Gate G5 passed**, the version and the report hash; each page shows its rendered image (the placeholder "Render unavailable — open in Power BI" with a link if there is no capacity) next to the questions it answers; each visual shows its title, type, the questions it answers and **Binding: Passed** / **Query: Passed** (a "no data" warning shows its message).
+2. 🌐 **Single-visual regenerate.** Click **Regenerate** on "Net Revenue by Month", type "use a column chart" and click **Regenerate**. **Expected:** a notice says it was regenerated; the version goes up by one; `git diff --no-index --stat runs/<run_A>/report/v<n> runs/<run_A>/report/v<n+1>` (ignoring `renders`) shows only `definition/pages/p1/visuals/v1/visual.json` changed; the chart is now a column chart in the report and in the new render; Gate G5 ran again (a new validation entry in `ValidationReport.json`); the history shows a REGENERATE with the target and your guidance.
+3. 🌐 **Approve.** Click **Approve as Project reviewer**. **Expected:** the run is still `REPORT_GENERATING`, the project reviewer shows "Approved by <you>", the business owner shows **Pending**. A user without a role sees that role's Approve disabled with "Only a business_owner can approve as business_owner." Then **Approve as Business owner** (a separate click, if you hold both roles). **Expected:** the run becomes `REPORT_APPROVED`, the history has one record per role with your UPN, and `runs\<run_A>\approvals.jsonl` ends with those `Report` records on the current hash.
+4. 🌐 **Invalidation.** On a fresh run, approve as Project reviewer, then regenerate a visual (or add a line to `definition\pages\p1\page.json` of the current version). Reload. **Expected:** the project reviewer shows **Invalidated: report changed**, the history entry is marked "invalidated: report changed", the page warns that the latest validation is of another version (after a hand edit), and approving as the business owner gives `409 GATE_FAILED` (`G5.CURRENT`) until you click **Validate again**.
+5. 💻 **Traversal blocked.** With a token (see the T-105 section), `curl.exe -i -H "Authorization: Bearer <token>" "http://localhost:8000/runs/<run_A>/files/..%2F..%2F.env"`. **Expected:** `404` and no file content. Also `…/files/report/v1/renders/p1.png` gives `200` with the image, and `…/files/..%2FBusinessContract.yaml` gives `404`.
+6. 🌐 **M6 exit.** With a run taken through plan, generate, validate and both approvals using Rayfin and the API only. **Expected:** the run is `REPORT_APPROVED`, `GET /runs/{run_A}/artifacts` shows `PbirReport` and `ReportPlan` as `approved`, and the report `Nexora_<first 8 characters>_Report` exists in the sandbox workspace.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t604_offline_checks`. **Expected:** `All checks passed.` (the review data, the file endpoint and its traversal cases, the placeholder, partial and complete approval, one user with both roles, role and hash checks, Gate G5, invalidation, Reject, regenerating a visual and a page, an invented measure refused, a model defect routed back, and the 403/404/409/422 cases).
+8. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `pass 63`, `fail 0`. `npm run typecheck` and `npm run build` also finish without errors, and the build lists `/runs/[id]/report`.
+9. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API and UI, delete the report and model from the sandbox workspace and the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live and browser steps (1-4 and 6, and the live call of 5), which need your Entra sign-in, the sandbox workspace and, for the images, a Fabric or Premium capacity. Claude ran steps 7 and 8.
+
 ---
 
 ## Next tasks
 
-Sections for T-604 and later are added when each task is implemented.
+Sections for T-701 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -659,6 +675,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t601_offline_checks.py` | T-601 | Fake-LLM checks of the report questions, RPLAN.1-RPLAN.7, the planner and `report/plan` |
 | `app/manual_tests/t602_offline_checks.py` | T-602 | Fake-Fabric checks of the PBIR generator, `upsert_report` and `report/generate` |
 | `app/manual_tests/t603_offline_checks.py` | T-603 | Fake-Fabric and Power BI checks of G5, `report/validate` and `report/repair` |
+| `app/manual_tests/t604_offline_checks.py` | T-604 | Checks of the report review data, the file endpoint, the role approvals of the Report and regenerating a visual or page |
 
 ## Adding a task
 

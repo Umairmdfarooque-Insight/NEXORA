@@ -194,6 +194,8 @@ def perform(
     llm: LlmCall | None = None,
     role: str | None = None,
     definition_wrong: bool = False,
+    target: dict[str, str] | None = None,
+    report_services: Any = None,
 ) -> Outcome:
     """Carry out one approval action. `user` is {oid, upn}. Raises Forbidden, GateFailed,
     AlreadyApproved, ContractLocked, WrongState, StaleVersion, NotFound or UnknownArtifact;
@@ -212,6 +214,10 @@ def perform(
         from app.workflow.model_review import decide_model  # avoids a circular import
 
         return decide_model(store, runs_root, run_id, action, user, expected_hash, comment, role, definition_wrong)
+    if artifact == "Report":
+        from app.workflow.report_review import decide_report  # avoids a circular import
+
+        return decide_report(store, runs_root, run_id, action, user, expected_hash, comment, role, target, report_services)
     if artifact.startswith("BridgeProposal:"):
         from app.workflow.bridge_stage import decide_bridge  # avoids a circular import
 

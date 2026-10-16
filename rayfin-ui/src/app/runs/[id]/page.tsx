@@ -201,6 +201,16 @@ export default function RunDetailPage() {
             </section>
           )}
 
+          {(run.artifacts.PbirReport || run.state.startsWith("REPORT_")) && (
+            <section className={styles.card} aria-label="Report">
+              <Subtitle2>Report</Subtitle2>
+              <Body1>
+                <Link href={`/runs/${encodeURIComponent(run.run_id)}/report`}>Open the report review</Link> to see each
+                rendered page and the questions its visuals answer, regenerate a visual, and approve the report.
+              </Body1>
+            </section>
+          )}
+
           <div className={styles.columns}>
             <div className={styles.stack}>
               <section className={styles.card} aria-label="Prompt">
