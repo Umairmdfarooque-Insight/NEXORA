@@ -5,11 +5,12 @@ generated. `extra="forbid"` means a typo in a hand-edited file is an error, not 
 Files are saved with a fixed key order, UTF-8 and LF line endings.
 """
 
-import os
 from pathlib import Path
 from typing import Literal, TypeVar
 
 import yaml
+
+from app.fsutil import replace_file
 from pydantic import BaseModel, ConfigDict, Field
 
 SCHEMA_VERSION = 1
@@ -172,7 +173,7 @@ def save_yaml(model: BaseModel, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(dump_yaml(model).encode("utf-8"))  # bytes: Windows keeps LF
-    os.replace(tmp, path)
+    replace_file(tmp, path)
 
 
 def load_yaml(cls: type[M], path: Path) -> M:

@@ -38,7 +38,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | Sandbox topology | **Decided: one dedicated sandbox workspace per environment** (`SANDBOX_WORKSPACE_ID`) | T-501 |
 | Approval roles | **Decided: spec roles in a committed `config/roles.yaml`** (real UPNs in the public repo, one person may hold several roles during development) | T-204 |
 | Initial domain | **Decided: Sales** (the existing `saleslt` data) | T-202 |
-| Retry limits | 3 attempts per artifact section | T-505 |
+| Retry limits | **Decided: 3 attempts per repair call** (`max_attempts` in `config/repair_policy.yaml`), plus an earlier stop when an attempt makes no progress | T-505 |
 
 ## Task index
 
@@ -71,7 +71,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-502 | TMDL generator | M5 | Done | task/T-502-tmdl-generator |
 | T-503 | DAX measure generation | M5 | Done | task/T-503-dax-measure-generation |
 | T-504 | Model validators and Gate G4 | M5 | Done | task/T-504-model-validators-gate-g4 |
-| T-505 | Validation and Repair service | M5 | Not started |  |
+| T-505 | Validation and Repair service | M5 | Done | task/T-505-validation-repair-service |
 | T-506 | Bridge-table generation | M5 | Not started |  |
 | T-507 | Model review and approval UI | M5 | Not started |  |
 | T-601 | Report planner | [M6 Report](M6-report.md) | Not started |  |

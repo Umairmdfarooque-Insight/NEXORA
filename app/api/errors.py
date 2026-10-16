@@ -46,6 +46,7 @@ from app.workflow.compile_stage import WrongState
 from app.workflow.harvest_stage import ScopeMissing
 from app.workflow.inventory_review import NotACandidate
 from app.model.tmdl_generator import ModelGenerationError
+from app.repair.service import NothingToRepair, UnsupportedArtifact
 from app.workflow.model_stage import ModelSpecInvalid
 from app.workflow.plan_review import PlanEditInvalid
 from app.workflow.scope import SchemaNotFound, ScopeLocked
@@ -202,6 +203,14 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"failed_checks": [c.model_dump(mode="json") for c in exc.failed]},
         )
+
+    @app.exception_handler(NothingToRepair)
+    async def nothing_to_repair(request: Request, exc: NothingToRepair):
+        return error_response(409, "WRONG_STATE", str(exc))
+
+    @app.exception_handler(UnsupportedArtifact)
+    async def unsupported_artifact(request: Request, exc: UnsupportedArtifact):
+        return error_response(422, "VALIDATION_ERROR", str(exc), {"artifact": exc.artifact})
 
     @app.exception_handler(ModelGenerationError)
     async def model_generation_error(request: Request, exc: ModelGenerationError):

@@ -86,6 +86,8 @@ from app.workflow.measure_stage import add_measures
 from app.connectors.powerbi_api import PowerBiClient
 from app.deploy.fabric_items import FabricItemsClient
 from app.model.recon_sql import LlmCall as ReconLlm
+from app.repair.models import RepairResult
+from app.repair.service import repair as repair_model
 from app.workflow.model_stage import generate_model
 from app.workflow.validate_stage import validate_model
 from app.workflow.plan_review import check_g3, edit_plan
@@ -495,6 +497,25 @@ def model_validate(
         user_upn=user.upn, actor=user.upn,
     )
     return ModelValidateResponse(report=entry, run=detail(run, runs_root))
+
+
+@router.post("/{run_id}/model/repair", response_model=RepairResult)
+def model_repair(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    items: FabricItemsClient = Depends(get_items_client),
+    pbi: PowerBiClient = Depends(get_powerbi_client),
+    sql_factory=Depends(get_sql_connector_factory),
+    dax_llm: DaxLlm = Depends(get_dax_llm),
+    recon_llm: ReconLlm = Depends(get_recon_llm),
+    user: Principal = Depends(current_user),
+):
+    return repair_model(
+        store, runs_root, run_id, "SemanticModel",
+        llm=dax_llm, items_client=items, pbi=pbi, sql_connector_factory=sql_factory, recon_llm=recon_llm,
+        user_upn=user.upn, actor=user.upn,
+    )
 
 
 @router.patch("/{run_id}/plan", response_model=PlanEditResponse, response_model_by_alias=True)

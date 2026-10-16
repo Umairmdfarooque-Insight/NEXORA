@@ -7,12 +7,12 @@ when repair calls it). Existing version folders are never modified.
 """
 
 import hashlib
-import os
 import re
 import shutil
 from pathlib import Path
 
 from app.contracts.model_plan import ExecutionPlan, ModelSpec, load_yaml, to_data
+from app.fsutil import replace_file
 from app.model.tmdl_generator import generate_tmdl
 from app.store.base import RunStore
 from app.workflow.clarification import NotFound, StaleVersion
@@ -87,7 +87,7 @@ def write_model_version(store: RunStore, runs_root: Path, run_id: str) -> tuple[
     try:
         files = generate_tmdl(spec, staging, scope.sql_endpoint)  # raises before anything is kept
         digest = folder_hash(staging)
-        os.replace(staging, final)
+        replace_file(staging, final)
     finally:
         if staging.exists():
             shutil.rmtree(staging)

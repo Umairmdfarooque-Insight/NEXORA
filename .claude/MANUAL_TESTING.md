@@ -522,9 +522,25 @@ The table holds two literal rows, so no Lakehouse connection is needed. If Fabri
 
 ---
 
+### T-505 — Validation and Repair service
+
+**Before you start:** the T-504 setup (API running, `SANDBOX_WORKSPACE_ID`, Power BI consent). Each step below uses a fresh run in `MODEL_GENERATING` with the measures added and `model\v2` generated, validated with `POST /runs/{id}/model/validate`. Repair calls the real model for DAX, so `.env` must reach it.
+
+1. 🌐 **Targeted repair.** In `runs\<id>\model\v2\definition\tables\<fact table>.tmdl` change `Sales[LineTotal]` in the Net Revenue measure to `Sales[LineTotalX]` and validate: **Expected:** the run is `MODEL_FAILED`. Then `POST /runs/{id}/model/repair`. **Expected:** HTTP 200, `outcome: passed`, one attempt, `final_state: MODEL_GENERATING`. `git diff --no-index runs\<id>\model\v2 runs\<id>\model\v3` shows only the fact table's file (the typo was in the deployed files, so the repair restores the measure from the ModelSpec after the model re-checks it); `ValidationReport.json` shows the failed run, then a run with `repair_attempt: 1` that passed.
+2. 🌐 **Escalation.** Make the model read a source column that doesn't exist: in the Lakehouse (or in `runs\<id>\model\v2` for a column of a Direct Lake table) rename a column that a measure uses, then validate. **Expected:** a failing `G4.DAX` check whose message names the column (for example "The refresh failed: Column 'LineTotal' not found ..."). `POST /runs/{id}/model/repair` then returns `outcome: user_input_only`, no attempts, `final_state: NEEDS_INPUT`, and a `message` naming the column. No model call is made. `python -m app.cli runs show <id>` shows `resume_state: MODEL_FAILED`. Restore the column afterwards.
+3. 🌐 **Retry limit.** Set `reconciliation.relative_tolerance` and `absolute_tolerance` to `0` in `config\validation.yaml` (restore afterwards) so that a rounding difference fails `G4.RECON`, then validate and repair. **Expected:** at most 3 attempts (or an earlier `no_progress` stop, if the model returns the measure unchanged), then `NEEDS_INPUT` with a message listing what remains.
+4. 🌐 **Audit.** Open `runs\<id>\ValidationReport.json` after step 1 or 3. **Expected:** one run per validation and per repair attempt, each with `attempt`, `repair_attempt`, `artifact_version` and a `fingerprint` per check.
+5. 🌐 **Graph boundary.** After step 3 run `python -m app.cli runs show <id>`. **Expected:** `history` has one entry for the repair call (`MODEL_FAILED -> NEEDS_INPUT`), not one per attempt; the attempts appear only in `ValidationReport.json` and in the `attempts` of the response.
+6. 💻 **Offline checks.** `python -m app.manual_tests.t505_offline_checks`. **Expected:** `All checks passed.` (fingerprints, the policy, every outcome, the scope guard dropping an attempt, the deterministic fix, the artifacts and the single transition, and the 404/409/422 cases).
+7. 💻 **Clean up.** Restore `config\validation.yaml`, delete the models from the sandbox workspace, stop the API, and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1-5), which need your Entra token and Power BI consent, the real model, the sandbox workspace and the Lakehouse. Claude ran step 6.
+
+---
+
 ## Next tasks
 
-Sections for T-505 and later are added when each task is implemented.
+Sections for T-506 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -556,6 +572,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t502_offline_checks.py` | T-502 | Checks of the TMDL generator, `model/generate` and `cli model generate` |
 | `app/manual_tests/t503_offline_checks.py` | T-503 | Fake-LLM checks of the DAX pre-check, the `dax_measure` graph and `model/measures` |
 | `app/manual_tests/t504_offline_checks.py` | T-504 | Fake-Fabric, Power BI, SQL and LLM checks of the G4 checks, the report and `model/validate` |
+| `app/manual_tests/t505_offline_checks.py` | T-505 | Fake-service checks of the repair policy, the `repair` graph, the scope guard and `model/repair` |
 
 ## Adding a task
 

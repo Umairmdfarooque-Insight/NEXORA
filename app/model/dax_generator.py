@@ -333,8 +333,16 @@ def approved_description(kpi: Kpi) -> str:
     return "\n".join(lines)
 
 
-def propose_measure_dax(kpi: Kpi, spec: ModelSpec, llm: LlmCall | None = None, measure_name: str | None = None) -> DaxProposal:
-    """The accepted DAX for one measure, or `DaxRejected` with the reason after at most 2 attempts."""
+def propose_measure_dax(
+    kpi: Kpi,
+    spec: ModelSpec,
+    llm: LlmCall | None = None,
+    measure_name: str | None = None,
+    feedback: list[str] | None = None,
+) -> DaxProposal:
+    """The accepted DAX for one measure, or `DaxRejected` with the reason after at most 2 attempts.
+
+    `feedback` is why an earlier version failed validation (T-505), given to the model from the first attempt."""
     from app.graphs.base import run_graph
     from app.graphs.dax_measure import build_dax_measure_graph
 
@@ -343,7 +351,7 @@ def propose_measure_dax(kpi: Kpi, spec: ModelSpec, llm: LlmCall | None = None, m
     if reason:
         raise DaxRejected(reason)
     graph = build_dax_measure_graph(llm or default_dax_llm())
-    final = run_graph(graph, {"kpi": kpi, "spec": spec, "measure": name}, run_id=spec.run_id, stage="dax_measure")
+    final = run_graph(graph, {"kpi": kpi, "spec": spec, "measure": name, "errors": list(feedback or [])}, run_id=spec.run_id, stage="dax_measure")
     if final.get("proposal") is None:
         raise DaxRejected("; ".join(final.get("errors", [])) or "no usable proposal", final.get("attempts_log", []))
     return final["proposal"]
