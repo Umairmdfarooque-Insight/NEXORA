@@ -693,11 +693,26 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 **Not run by Claude:** the live and browser steps (1-5), which need your Entra sign-in and a run taken to `COMPLETED` in Fabric. Claude ran steps 6 and 7.
 
+### T-704 — Observability
+
+**Before you start:** `pip install -r requirements.txt` (it now lists `opentelemetry-sdk` and `azure-monitor-opentelemetry-exporter`). Fill in `config\model_pricing.yaml` with the price of your deployment (the name in `AZURE_OPENAI_DEPLOYMENT`), for example `my-deployment:` with `input_per_1k:` and `output_per_1k:` indented under it (USD per 1,000 tokens); without it the cost isn't recorded and one warning names the deployment. Put a phrase of your own in the prompt you test with, for example `zebra-quartz`.
+
+1. 🌐 **Correlated logs and spans.** Set `OTEL_EXPORTER=console` in `.env`, start the API (`uvicorn app.api.main:app --reload --port 8000`) and, from Rayfin or Swagger, create a run, **Compile** it, approve the contract and **Harvest** it. **Expected:** the console shows JSON log lines (`{"ts": …, "level": …, "run_id": "<id>", "stage": "compile", "msg": …}`) with the run's ID on every line made for that run, a `request` line per call with its status and `duration_ms`, and span blocks named `stage.compile`, `stage.compile.node.llm_compile`, `stage.compile.node.validate_schema` and `stage.harvest` (each with `run_id`, `stage`, `attempt`, `outcome` in its attributes and a start and end time). `GET /health` produces no span and no `run_id`.
+2. 🌐 **Metrics.** After a few calls (the console prints metrics about every 30 seconds, or when the API stops), look for `nexora.stage.duration`, `nexora.llm.tokens.input`, `nexora.llm.tokens.output` and, if the pricing is filled in, `nexora.llm.cost`, each with the `run_id`. A gate result (check G1) adds `nexora.validation.passed`.
+3. 🌐 **No prompt leakage.** Search the whole console output for your phrase (for example paste it into a text search of the saved output, or run the API with `2> api.log` and `Select-String zebra-quartz api.log`). **Expected:** no match. The `model call` lines show only `input`, `output` and `instructions` as `{"len": …, "sha256": …}`, plus the token counts and `cost_usd`.
+4. 🌐 **App Insights.** Set `OTEL_EXPORTER=azuremonitor` and `APPLICATIONINSIGHTS_CONNECTION_STRING` (from the Application Insights resource), restart, and repeat step 1 with a run that includes a repair if you can (a model with a failing measure). After a few minutes, in Logs run `traces | where customDimensions.run_id == "<id>"` and `dependencies | where customDimensions.run_id == "<id>"`, and `customMetrics | where name startswith "nexora"`. **Expected:** every stage of the run is present (`stage.compile`, `stage.harvest`, …), a repair attempt appears as spans `stage.model.repair.node.classify` with `attempt` 2 or more and a `nexora.retries` metric, and the `nexora.llm.tokens.*` and `nexora.llm.cost` metrics carry the `run_id`.
+5. 🌐 **Unreachable exporter.** Set `OTEL_EXPORTER=azuremonitor` with a connection string whose `IngestionEndpoint` is `http://127.0.0.1:9/`, restart and compile a run. **Expected:** the run works as usual; the exporter's failures are logged by the exporter itself, not raised. With `OTEL_EXPORTER=azuremonitor` and no connection string: one warning ("needs APPLICATIONINSIGHTS_CONNECTION_STRING: telemetry is off") and the run works.
+6. 💻 **Offline checks.** `python -m app.manual_tests.t704_offline_checks`. **Expected:** `All checks passed.` (the span and node spans with their attributes, the correlated JSON logs, no span outside a run, outcomes, retries and attempts, validation outcomes, token and cost metrics, a missing price, no content in any log line, exporters that fail, the settings, and the header on outbound calls). Lines such as `ConnectionError: exporter unreachable` printed by it come from the failing exporter the test installs on purpose.
+7. 💻 **Earlier checks still pass.** `python -m app.manual_tests.t202_offline_checks` and `python -m app.manual_tests.t505_offline_checks`. **Expected:** `All checks passed.` for each.
+8. 💻 **Clean up.** Set `OTEL_EXPORTER=` (empty) again in `.env`, remove the connection string and stop the API.
+
+**Not run by Claude:** steps 1-5, which need the live model, your `.env` and Application Insights. Claude ran steps 6 and 7.
+
 ---
 
 ## Next tasks
 
-Sections for T-704 and later are added when each task is implemented.
+Sections for T-705 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -739,6 +754,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t701_offline_checks.py` | T-701 | Fake-service checks of returning a run, object-level impact, stale marking and its guards, and targeted regeneration |
 | `app/manual_tests/t702_offline_checks.py` | T-702 | Fake-Fabric and Power BI checks of the release approval, Gate G6, the lock, smoke tests, completion and rollback |
 | `app/manual_tests/t703_offline_checks.py` | T-703 | Checks of the tamper-evident event log, the audit timeline and the trace of a visual |
+| `app/manual_tests/t704_offline_checks.py` | T-704 | In-memory-exporter checks of correlation, spans, metrics, model-call cost and the no-content log rule |
 
 ## Adding a task
 

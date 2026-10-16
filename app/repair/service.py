@@ -107,7 +107,7 @@ def repair(
             "errors": failed, "attempt": 0, "attempts": [], "seen_fingerprints": [],
         },
         run_id=run_id,
-        stage="repair",
+        stage="model.repair",
         recursion_limit=policy.max_attempts * NODES_PER_ATTEMPT + 10,
     )
     outcome = final["outcome"]
@@ -167,7 +167,7 @@ def repair_report(store: RunStore, runs_root: Path, run_id: str, *, items_client
             "errors": failed, "attempt": 0, "attempts": [], "seen_fingerprints": [],
         },
         run_id=run_id,
-        stage="repair",
+        stage="report.repair",
         recursion_limit=policy.max_attempts * NODES_PER_ATTEMPT + 10,
     )
     outcome = final["outcome"]

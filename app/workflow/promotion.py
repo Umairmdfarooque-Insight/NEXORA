@@ -390,6 +390,15 @@ def run_deployment(
     store: RunStore, runs_root: Path, run_id: str, started: Started, services: Services, actor: str = "system"
 ) -> None:
     """Back up, deploy, smoke-test and settle the run. Never raises: the outcome is in the run."""
+    from app.observability.telemetry import stage_span  # T-704: the background job is a stage of its own
+
+    with stage_span("deploy.run", run_id=run_id) as span:
+        _run_deployment(store, runs_root, run_id, started, services, actor, span)
+
+
+def _run_deployment(
+    store: RunStore, runs_root: Path, run_id: str, started: Started, services: Services, actor: str, span: Any
+) -> None:
     target = started.target
     run_dir = Path(runs_root) / run_id
     planned: list[dict] = []
@@ -431,6 +440,7 @@ def run_deployment(
             actions, ok = _rollback(services.items, target, planned, backup_dir)
         except Exception as rollback_error:  # the rollback itself blew up
             actions, ok = [{"action": "rollback", "status": "failed", "message": str(rollback_error)[:300]}], False
+        span.set_outcome("rolled_back" if ok else "rollback_failed")
         _set(store, run_id, finished_at=utc_now(), outcome="rolled_back" if ok else "rollback_failed", error=reason, rollback=actions)
         if ok:
             store.transition(run_id, S.ROLLED_BACK, f"Deployment failed and was rolled back: {reason}", actor)

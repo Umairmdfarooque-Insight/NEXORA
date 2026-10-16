@@ -81,7 +81,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-701 | Impact analysis and stale marking | [M7 Operational controls](M7-operational-controls.md) | Done | task/T-701-impact-analysis-stale-marking |
 | T-702 | Promotion deployment, smoke tests and rollback | M7 | Done | task/T-702-promotion-deployment-smoke-tests-rollback |
 | T-703 | Audit trail and traceability view | M7 | Done | task/T-703-audit-trail-traceability-view |
-| T-704 | Observability | M7 | Not started |  |
+| T-704 | Observability | M7 | Done | task/T-704-observability |
 | T-705 | Security hardening | M7 | Not started |  |
 | T-706 | End-to-end vertical slice acceptance | M7 | Not started |  |
 

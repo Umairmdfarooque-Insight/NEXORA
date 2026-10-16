@@ -15,6 +15,10 @@ from app.api.errors import register_error_handlers
 from app.api.schemas import Health
 from app.compiler.critical_terms import load_critical_terms
 from app.config import APP_NAME, PROJECT_ROOT
+from app.observability import telemetry
+from app.observability.http import install as install_http_correlation
+from app.observability.logs import configure_logging
+from app.observability.middleware import correlation
 from app.workflow.roles import load_roles
 
 RAYFIN_ORIGIN = "http://localhost:3000"
@@ -37,14 +41,11 @@ def _version() -> str:
 
 VERSION = _version()
 
-# Stage graphs log their node path at INFO. Only the app's own loggers are switched on, so
-# third-party libraries stay quiet.
-_app_logger = logging.getLogger("app")
-_app_logger.setLevel(logging.INFO)
-if not _app_logger.handlers:
-    _handler = logging.StreamHandler()
-    _handler.setFormatter(logging.Formatter("%(levelname)s:     %(name)s: %(message)s"))
-    _app_logger.addHandler(_handler)
+# The app's own loggers write JSON lines (ts, level, run_id, stage, msg, ...) at INFO; third-party libraries
+# stay quiet. Telemetry (T-704) starts from OTEL_EXPORTER and never stops the API if it can't.
+configure_logging()
+telemetry.init_from_env()
+install_http_correlation()
 
 
 @asynccontextmanager
@@ -61,6 +62,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(correlation)
 register_error_handlers(app)
 app.include_router(runs.router)
 app.include_router(fabric.router)

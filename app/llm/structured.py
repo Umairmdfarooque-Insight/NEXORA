@@ -2,6 +2,9 @@
 
 import openai
 
+from app.observability import telemetry
+from app.observability.context import current_run_id
+
 from app.config import AZURE_OPENAI_DEPLOYMENT
 from app.llm.client import client
 from app.llm.errors import LlmTimeout, LlmUpstreamError, PromptRejected
@@ -26,6 +29,7 @@ def ask_structured(system: str, user: str, name: str, schema: dict) -> str:
                 }
             },
             timeout=TIMEOUT_SECONDS,
+            extra_headers={"x-nexora-run-id": current_run_id()} if current_run_id() else None,
         )
     except openai.APITimeoutError:
         raise LlmTimeout(
@@ -39,4 +43,10 @@ def ask_structured(system: str, user: str, name: str, schema: dict) -> str:
         raise LlmUpstreamError("The model service rejected the request") from None
     except openai.OpenAIError:
         raise LlmUpstreamError("The model service returned an error") from None
-    return response.output_text or ""
+    output = response.output_text or ""
+    usage = getattr(response, "usage", None)
+    telemetry.record_llm(
+        AZURE_OPENAI_DEPLOYMENT, system, user, output,
+        getattr(usage, "input_tokens", None), getattr(usage, "output_tokens", None),
+    )
+    return output
