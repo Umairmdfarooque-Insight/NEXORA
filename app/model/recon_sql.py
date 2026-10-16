@@ -27,12 +27,10 @@ FORBIDDEN = re.compile(
     r"OPENROWSET|OPENQUERY|OPENDATASOURCE|BULK|WAITFOR|SHUTDOWN|DBCC|USE)\b|\bxp_\w+",
     re.IGNORECASE,
 )
-SOURCE_REF = re.compile(
-    r"\b(?:FROM|JOIN)\s+((?:\[(?:[^\]]|\]\])+\]|[A-Za-z_]\w*)(?:\s*\.\s*(?:\[(?:[^\]]|\]\])+\]|[A-Za-z_]\w*))*)",
-    re.IGNORECASE,
-)
-NUMBER = re.compile(r"(?<![A-Za-z_\d.\[])\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
-PART = re.compile(r"\[((?:[^\]]|\]\])+)\]|([A-Za-z_]\w*)")
+IDENT = r"(?:\[(?:[^\]]|\]\])+\]|`[^`]+`|[A-Za-z_]\w*)"  # [T-SQL], `Spark` or a plain identifier
+SOURCE_REF = re.compile(r"\b(?:FROM|JOIN)\s+(" + IDENT + r"(?:\s*\.\s*" + IDENT + r")*)", re.IGNORECASE)
+NUMBER = re.compile(r"(?<![A-Za-z_\d.\[`])\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
+PART = re.compile(r"\[((?:[^\]]|\]\])+)\]|`([^`]+)`|([A-Za-z_]\w*)")
 
 SYSTEM_PROMPT = """You are Nexora's reconciliation analyst for Microsoft Fabric analytics.
 Write T-SQL that computes the SAME business KPI straight from the source tables, so its result can
@@ -178,6 +176,11 @@ def _strip(sql: str) -> tuple[str, list[str]]:
                 j += 1
             out.append(sql[i : j + 1])
             i = j + 1
+        elif sql[i] == "`":  # so is a Spark identifier in backticks
+            j = sql.find("`", i + 1)
+            j = n - 1 if j < 0 else j
+            out.append(sql[i : j + 1])
+            i = j + 1
         else:
             out.append(sql[i])
             i += 1
@@ -202,7 +205,7 @@ def check_sql(sql: str, inventory: MetadataInventory, kpi: Kpi, label: str) -> l
     known = {f"{t.schema_name}.{t.table_name}".casefold() for t in inventory.tables}
     ctes = {m.group(1).casefold() for m in re.finditer(r"(?is)(?:\bWITH\b|,)\s*(\w+)\s+AS\s*\(", body)}
     for m in SOURCE_REF.finditer(body):
-        parts = [(a if a else b).replace("]]", "]") for a, b in PART.findall(m.group(1))]
+        parts = [(a or b or c).replace("]]", "]") for a, b, c in PART.findall(m.group(1))]
         if len(parts) == 1 and parts[0].casefold() in ctes:
             continue
         if len(parts) != 2 or f"{parts[0]}.{parts[1]}".casefold() not in known:

@@ -538,9 +538,25 @@ The table holds two literal rows, so no Lakehouse connection is needed. If Fabri
 
 ---
 
+### T-506 — Bridge-table generation
+
+**Before you start:** run A of T-505 with the T-403 data: a run on scope `saleslt` and `nexora_test` with entities including Product and Promotion, the relationships of the bridge analyzed (`POST /runs/{id}/relationships/analyze` with `nexora_test.bridge_product_promotion.ProductID` to `saleslt.SalesLT_Product.ProductID` and `PromotionID` to `nexora_test.dim_promotion.PromotionID` as user candidates), bridge proposal `B1` (Product x Promotion, `existing_table`) approved (`POST /runs/{id}/approvals` with `{"artifact": "BridgeProposal:B1", "action": "ACCEPT", "expected_hash": "<BridgeProposals hash>"}`), the plan accepted, the model generated with measures, and validated once (`POST /runs/{id}/model/validate` passing: that is the baseline for the totals). The run's Lakehouse must be in the sandbox workspace (`SANDBOX_WORKSPACE_ID`).
+
+1. 🌐 **Bridge generated.** `POST /runs/{run_A}/model/bridges/B1/generate`. **Expected:** HTTP 200, a `version` one higher than the validated one, `validation.passed: true`, and the checks `G4.BRIDGE.UNIQUE`, two `G4.BRIDGE.ORPHANS` and `G4.BRIDGE.TOTALS` all `pass`. `runs\<run_A>\ModelSpec.yaml` has `bridge_product_promotion` with `role: bridge` and two `many_to_one` relationships from it (to Product with `cross_filter: both`, to Promotion `single`). In the web model view of the deployed model (`Nexora_<run>`) the bridge and its two relationships are visible.
+2. 🌐 **No double counting.** On the previous model version (`runs\<run_A>\model\v<n>`, deployed with `python -m app.cli deploy model ... --name Nexora_before`) and on the new one, run `EVALUATE ROW("All", [Net Revenue])` in the web model view, and compare both with the SQL total (`SELECT SUM(d.LineTotal) FROM saleslt.SalesLT_SalesOrderDetail d JOIN saleslt.SalesLT_SalesOrderHeader h ON h.SalesOrderID = d.SalesOrderID WHERE h.Status <> 6`). **Expected:** all three values match, and the `G4.BRIDGE.TOTALS` evidence shows `total_before` and `total_with_bridge` equal.
+3. 🌐 **Per-promotion values.** In the web model view run `EVALUATE SUMMARIZECOLUMNS('Promotion'[PromotionName], "NR", [Net Revenue])` and compare each row with a hand-written SQL join through the bridge (`... JOIN nexora_test.bridge_product_promotion b ON b.ProductID = d.ProductID JOIN nexora_test.dim_promotion p ON p.PromotionID = b.PromotionID ... GROUP BY p.PromotionName`). **Expected:** the values match (a product in two promotions counts in both, so the rows add up to more than the grand total).
+4. 🌐 **Duplicates fail.** In the sandbox Lakehouse insert a duplicate pair into `nexora_test.bridge_product_promotion` with a Spark notebook cell (`spark.sql("INSERT INTO nexora_test.bridge_product_promotion SELECT * FROM nexora_test.bridge_product_promotion LIMIT 1")`), then `POST /runs/{run_A}/model/validate`. **Expected:** `G4.BRIDGE.UNIQUE` fails showing the pair and its count, and the run is `MODEL_FAILED`. Remove the duplicate row afterwards by rerunning `fixtures\create_test_tables.ipynb`.
+5. 🌐 **Notebook path (optional).** Add a rule to `config\derivation_rules.yaml` (restore it afterwards) for entities Product and Region, run T-403 for a run that has a Region entity with no mapping table, approve the proposal, then generate it. **Expected:** `runs\<id>\bridges\B1.ipynb` exists, a notebook `Nexora_<run>_B1` is in the sandbox workspace and ran, `nexora_generated.bridge_b1_product_region` exists in the Lakehouse, and the model references it. Read the SQL in the notebook: it is the model's draft and should match the rule.
+6. 💻 **Offline checks.** `python -m app.manual_tests.t506_offline_checks`. **Expected:** `All checks passed.` (the notebook and the items client for notebooks and jobs, the model changes and filter directions, every G4.BRIDGE check passing and failing, deduplication under a rule, a derived bridge, the SQL guard, a failing notebook, the sandbox rule, and the 404/409/422/403/502 cases).
+7. 💻 **Clean up.** Delete the models and notebooks from the sandbox workspace and the `nexora_generated` tables, restore `config\derivation_rules.yaml`, stop the API, and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1-5), which need your Entra token and Power BI consent, the real model, the sandbox workspace and Lakehouse. Claude ran step 6.
+
+---
+
 ## Next tasks
 
-Sections for T-506 and later are added when each task is implemented.
+Sections for T-507 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -573,6 +589,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t503_offline_checks.py` | T-503 | Fake-LLM checks of the DAX pre-check, the `dax_measure` graph and `model/measures` |
 | `app/manual_tests/t504_offline_checks.py` | T-504 | Fake-Fabric, Power BI, SQL and LLM checks of the G4 checks, the report and `model/validate` |
 | `app/manual_tests/t505_offline_checks.py` | T-505 | Fake-service checks of the repair policy, the `repair` graph, the scope guard and `model/repair` |
+| `app/manual_tests/t506_offline_checks.py` | T-506 | Fake-service checks of bridge generation, the notebook, G4.BRIDGE.* and `model/bridges/{id}/generate` |
 
 ## Adding a task
 

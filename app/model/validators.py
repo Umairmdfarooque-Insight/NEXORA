@@ -53,6 +53,7 @@ class Context:
     recon_for: Callable[[Kpi], ReconSql]
     user_upn: str | None = None
     values: dict[str, float | None] = field(default_factory=dict)  # measure -> DAX total, set by check_dax
+    baseline: dict[str, float | None] = field(default_factory=dict)  # measure -> total in the last validated earlier version
 
 
 def _kpi_of(ctx: Context, measure: str) -> Kpi | None:

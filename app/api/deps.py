@@ -11,6 +11,7 @@ from app.auth import FABRIC_SCOPE, POWERBI_SCOPE, SQL_SCOPE, STORAGE_SCOPE
 from app.connectors.fabric_api import FabricApiClient
 from app.connectors.powerbi_api import PowerBiClient
 from app.deploy.fabric_items import FabricItemsClient
+from app.model.bridge_sql import LlmCall as BridgeLlm, default_bridge_llm
 from app.model.recon_sql import LlmCall as ReconLlm, default_recon_llm
 from app.compiler.requirement_compiler import LlmCall, default_llm
 from app.model.dax_generator import LlmCall as DaxLlm, default_dax_llm
@@ -55,6 +56,10 @@ def get_feasibility_llm() -> SourceLlm:
 
 def get_dax_llm() -> DaxLlm:
     return default_dax_llm()
+
+
+def get_bridge_llm() -> BridgeLlm:
+    return default_bridge_llm()
 
 
 def get_recon_llm() -> ReconLlm:

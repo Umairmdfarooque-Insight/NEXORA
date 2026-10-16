@@ -113,6 +113,11 @@ class ModelGenerateResponse(BaseModel):
     run: RunDetail
 
 
+class BridgeGenerateResponse(BaseModel):
+    version: int  # the TMDL version that includes the bridge
+    validation: ValidationRun  # its Gate G4 run, with the G4.BRIDGE.* checks
+
+
 class ModelValidateResponse(BaseModel):
     report: ValidationRun  # this validation run's entry of ValidationReport.json
     run: RunDetail
