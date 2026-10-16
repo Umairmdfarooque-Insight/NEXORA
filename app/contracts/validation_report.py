@@ -4,10 +4,11 @@ Written by the model validation stage (T-504); T-505 reads it and sets `classifi
 """
 
 import hashlib
-import os
+import re
 from pathlib import Path
 from typing import Any, Literal
 
+from app.fsutil import replace_file
 from pydantic import BaseModel, ConfigDict, Field
 
 SCHEMA_VERSION = 1
@@ -36,6 +37,7 @@ class ValidationRun(_Strict):
     attempt: int
     started_at: str
     passed: bool
+    repair_attempt: int | None = None  # set when the run was made by the repair service (T-505)
     checks: list[ValidationCheck]
 
 
@@ -45,9 +47,20 @@ class ValidationReport(_Strict):
     runs: list[ValidationRun] = Field(default_factory=list)
 
 
+_GUID = re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b")
+_NUMBER = re.compile(r"\d+(?:[.,]\d+)*")
+
+
+def normalize_message(message: str) -> str:
+    """The message without ids and numbers, so the same failure has the same fingerprint when only a
+    value changed (a DAX value, a row count, a request id, a version)."""
+    return " ".join(_NUMBER.sub("#", _GUID.sub("#", message)).split())
+
+
 def fingerprint(check_id: str, obj: str, code: str | None, message: str) -> str:
-    """Identifies a failure across attempts, so repair can tell whether it made progress."""
-    return "sha256:" + hashlib.sha256(f"{check_id}|{obj}|{code or ''}|{message}".encode("utf-8")).hexdigest()
+    """sha256(code + object + normalized message), with the check id too. It identifies a failure
+    across attempts, so repair can tell whether it made progress."""
+    return "sha256:" + hashlib.sha256(f"{check_id}|{code or ''}|{obj}|{normalize_message(message)}".encode("utf-8")).hexdigest()
 
 
 def load_report(path: Path, run_id: str) -> ValidationReport:
@@ -66,5 +79,5 @@ def save_report(report: ValidationReport, path: Path) -> dict:
 
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes((json.dumps(data, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
-    os.replace(tmp, path)
+    replace_file(tmp, path)
     return data

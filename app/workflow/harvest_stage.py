@@ -6,11 +6,11 @@ A plain function, not a graph: the stage has no loop (CONTRACTS.md#stage-graphs)
 
 import hashlib
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any, Callable
 
+from app.fsutil import replace_file
 from app.contracts.metadata_inventory import (
     SCHEMA_VERSION,
     InventoryScope,
@@ -45,7 +45,7 @@ def write_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
-    os.replace(tmp, path)
+    replace_file(tmp, path)
 
 
 def _next_version(run: Run, inventories_dir: Path) -> int:

@@ -1,13 +1,13 @@
 """File-backed RunStore: runs/<run_id>/RunManifest.json."""
 
 import logging
-import os
 import uuid
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from app.config import PROJECT_ROOT
+from app.fsutil import replace_file
 from app.store.base import RunCorrupt, RunNotFound
 from app.workflow.run import Run, apply_transition, new_run
 from app.workflow.states import RunState
@@ -80,7 +80,7 @@ class FileRunStore:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(MANIFEST_NAME + ".tmp")
         tmp.write_text(run.to_json(), encoding="utf-8")
-        os.replace(tmp, path)
+        replace_file(tmp, path)
 
     def transition(
         self, run_id: str, to: RunState | None, reason: str, actor: str = "system"

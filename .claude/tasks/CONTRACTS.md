@@ -224,6 +224,7 @@ Saved as `runs/<run_id>/ValidationReport.json` (spec §10). Each new validation 
 
 - `status` is `pass` | `fail` | `warning` | `skipped` (T-504: a check that needs the deployed model is `skipped` when deployment or refresh failed).
 - `severity` is `error` | `warning` | `info`.
+- `repair_attempt` (T-505) is set on a validation run made by the repair service, with the number of the attempt; the fingerprint is `sha256(check id, code, object and the message with numbers and ids stripped)`.
 - `classification` is `deterministic` | `llm` | `user_input`. T-505 sets it.
 
 ## Object references
