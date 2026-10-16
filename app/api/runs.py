@@ -15,6 +15,7 @@ from app.api.deps import (
     get_feasibility_llm,
     get_llm,
     get_relationship_llm,
+    get_report_llm,
     get_runs_root,
     get_source_llm,
     get_sql_connector_factory,
@@ -49,6 +50,7 @@ from app.api.schemas import (
     PlanResponse,
     ProfileResponse,
     QuestionResponse,
+    ReportPlanResponse,
     RunDetail,
     RunList,
     RunSummary,
@@ -85,6 +87,8 @@ from app.workflow.bridge_stage import propose_bridges
 from app.workflow.feasibility_stage import check_feasibility
 from app.model.dax_generator import LlmCall as DaxLlm
 from app.workflow.measure_stage import add_measures
+from app.report.planner import LlmCall as ReportLlm
+from app.workflow.report_plan_stage import generate_report_plan, read_report_plan
 from app.connectors.powerbi_api import PowerBiClient
 from app.deploy.fabric_items import FabricItemsClient
 from app.model.recon_sql import LlmCall as ReconLlm
@@ -545,6 +549,28 @@ def model_bridge_generate(
         bridge_llm=bridge_llm, lakehouse_connector_factory=lakehouse_factory, user_upn=user.upn, actor=user.upn,
     )
     return BridgeGenerateResponse(version=version, validation=entry)
+
+
+@router.post("/{run_id}/report/plan", response_model=ReportPlanResponse)
+def report_plan(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    llm: ReportLlm = Depends(get_report_llm),
+    user: Principal = Depends(current_user),
+):
+    plan, validation, run = generate_report_plan(store, runs_root, run_id, llm, actor=user.upn)
+    return ReportPlanResponse(plan=plan.to_dict(), validation=validation, run=detail(run, runs_root))
+
+
+@router.get("/{run_id}/report/plan", response_model=ReportPlanResponse)
+def report_plan_read(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    plan, validation = read_report_plan(store, runs_root, run_id)
+    return ReportPlanResponse(plan=plan, validation=validation)
 
 
 @router.get("/{run_id}/model/review", response_model=ModelReview)

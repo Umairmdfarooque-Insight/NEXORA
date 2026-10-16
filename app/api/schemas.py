@@ -107,6 +107,12 @@ class PlanResponse(BaseModel):
     validation: GateResult
 
 
+class ReportPlanResponse(BaseModel):
+    plan: dict  # ReportPlan.json as saved (contracts/report_plan.py)
+    validation: GateResult  # RPLAN.1-RPLAN.7
+    run: RunDetail | None = None  # absent when the plan is only read
+
+
 class ModelGenerateResponse(BaseModel):
     version: int
     files: list[str]  # relative to runs/<id>/model/v<version>/
