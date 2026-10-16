@@ -113,6 +113,14 @@ class ReportPlanResponse(BaseModel):
     run: RunDetail | None = None  # absent when the plan is only read
 
 
+class ReportGenerateResponse(BaseModel):
+    version: int
+    files: list[str]  # relative to runs/<id>/report/v<version>/
+    report_item_id: str
+    operation: Literal["created", "updated"]
+    run: RunDetail
+
+
 class ModelGenerateResponse(BaseModel):
     version: int
     files: list[str]  # relative to runs/<id>/model/v<version>/
