@@ -118,6 +118,8 @@ from app.workflow.plan_stage import generate_plan, read_plan
 from app.workflow.source_stage import load_saved_resolution
 from app.workflow.scope import bind_scope
 from app.workflow.source_stage import resolve_sources
+from app.workflow import audit as audit_log
+from app.workflow.trace import trace as trace_visual
 from app.workflow.impact import ImpactReport, read_impact, return_run
 from app.workflow.regenerate_stale import StaleServices, regenerate_stale
 from app.workflow.promotion import Services as PromotionServices, run_deployment, start_deployment
@@ -784,3 +786,27 @@ def deploy(
     started = start_deployment(store, runs_root, run_id, body.target_workspace_id, services, user.upn)
     background.add_task(run_deployment, store, runs_root, run_id, started, services, user.upn)
     return DeployResponse(deployment_id=started.deployment_id)
+
+
+@router.get("/{run_id}/audit")
+def get_audit(
+    run_id: str,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    """The audit timeline, a page at a time, with whether the event chain is intact."""
+    return audit_log.audit(store, runs_root, run_id, offset, limit)
+
+
+@router.get("/{run_id}/trace")
+def get_trace(
+    run_id: str,
+    visual_id: str = Query(..., min_length=1),
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    """A visual traced back to its measure, DAX, approved KPI, source columns and the prompt."""
+    audit_log.record(store, runs_root, run_id)
+    return trace_visual(store, runs_root, run_id, visual_id)

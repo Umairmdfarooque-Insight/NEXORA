@@ -582,3 +582,62 @@ export interface ReportReview {
   approvals_status: RoleStatus[];
   approvals_done: ReportApproval[];
 }
+
+// --- audit and trace (T-703) ---
+
+export interface AuditEvent {
+  seq: number;
+  at?: string;
+  type?: string;
+  actor?: string;
+  artifact?: string | null;
+  version?: number | null;
+  hash?: string | null;
+  summary: string;
+  prev_event_hash?: string;
+  unreadable?: boolean;
+}
+
+export interface AuditPage {
+  events: AuditEvent[];
+  total: number;
+  chain_valid: boolean;
+  first_broken_seq: number | null;
+}
+
+export interface ProfileEvidence {
+  null_count: number | null;
+  distinct_count: number | null;
+  is_key_candidate: boolean;
+  is_unique: boolean | null;
+  min: unknown;
+  max: unknown;
+  approximate: boolean;
+  note: string | null;
+  row_count: number | null;
+  profiled_at: string;
+  queries: string[];
+}
+
+export interface TraceResult {
+  visual: { id: string; title: string; type: string; page: string; questions: { id: string; text: string }[] };
+  measure: { name: string; dax: string | null; model_version: number | null } | null;
+  other_measures: string[];
+  kpi: {
+    definition: {
+      name: string;
+      formula_intent: string | null;
+      grain: string | null;
+      filters: string[];
+      time_logic: string | null;
+      exclusions: string[];
+      currency: string | null;
+    } | null;
+    contract_version: number | null;
+    approved_by: string | null;
+    approved_at: string | null;
+  } | null;
+  sources: { table: string; column: string; need: string; role: string; profile_evidence: ProfileEvidence | null }[];
+  prompt: string;
+  gaps: string[];
+}

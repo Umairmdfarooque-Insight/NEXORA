@@ -211,6 +211,15 @@ export default function RunDetailPage() {
             </section>
           )}
 
+          <section className={styles.card} aria-label="Audit">
+            <Subtitle2>Audit trail</Subtitle2>
+            <Body1>
+              <Link href={`/runs/${encodeURIComponent(run.run_id)}/audit`}>Open the audit trail</Link> to see every stage, who
+              approved it and when, with the artifact hashes. From the report review, each visual has a Trace link back to its
+              measure, approved KPI, source columns and the prompt.
+            </Body1>
+          </section>
+
           <div className={styles.columns}>
             <div className={styles.stack}>
               <section className={styles.card} aria-label="Prompt">

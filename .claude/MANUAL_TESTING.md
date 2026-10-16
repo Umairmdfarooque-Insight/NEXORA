@@ -678,11 +678,26 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 **Not run by Claude:** steps 1-7, which need your Entra sign-in and live Fabric workspaces. Claude ran steps 8 and 9.
 
+### T-703 — Audit trail and traceability view
+
+**Before you start:** run A taken to `COMPLETED` (T-702), with a validated model, an approved report and a release, the API running (`uvicorn app.api.main:app --reload --port 8000`) and the UI (`cd rayfin-ui; npm install; npm run dev`, sign in at <http://localhost:3000>). `<id>` is run A's `run_id`.
+
+1. 🌐 **Timeline.** Open <http://localhost:3000/runs/{id}/audit> (or **Open the audit trail** on the run page). **Expected:** "the chain is intact", then every event of the run, oldest first: the state changes (including `REPORT_APPROVED → DEPLOYING` and `→ COMPLETED`), each approval with who gave it, the role, the time and the artifact version and hash, gate results (G1 to G6), validations and the deployment outcome with the deployed hashes. `runs\<id>\events.jsonl` exists, one JSON line per event with `seq`, `prev_event_hash` and the others.
+2. 🌐 **Trace.** Open the report review (`/runs/<id>/report`) and click **Trace** on a visual (or open `/runs/<id>/trace/v1`). **Expected:** the steps *Visual → Measure → DAX → Approved KPI → source columns → Prompt*; the measure with its DAX and model version, the KPI definition with the contract version, who approved it and when, each source column with its profile evidence (rows, nulls, distinct values, range, the queries) and the original prompt, without leaving Rayfin. A visual that doesn't exist (`/runs/<id>/trace/v99`) shows "no visual 'v99'".
+3. 🌐 **Gaps are shown.** Rename `runs\<id>\contracts\BusinessContract.v<n>.yaml` (the approved version) and reload the trace. **Expected:** a "Gaps in the trace" box says "Contract version <n> is missing…" and the KPI definition is empty; the rest of the trace still shows. Rename the file back.
+4. 🌐 **Tamper detection.** Copy `runs\<id>\events.jsonl` somewhere safe, then change one word in line 3 of the original (for example the actor) and reload `/runs/<id>/audit`. **Expected:** a red banner "Audit log tampered with" saying the chain is broken at event **4** (the event after the edit), and `GET /runs/<id>/audit` returns `chain_valid: false`, `first_broken_seq: 4`. Restore the copy; **Expected:** the chain is intact again.
+5. 🌐 **Paging.** `GET /runs/<id>/audit?offset=0&limit=5` in Swagger. **Expected:** 5 events (`seq` 1 to 5) and the full `total`; in Rayfin a long log shows 200 events a page with **Earlier events** / **Later events**.
+6. 💻 **Offline checks.** `python -m app.manual_tests.t703_offline_checks`. **Expected:** `All checks passed.` (the events for every source, the hash chain, no duplicates on a second look, paging, the trace of two visuals, the explicit gaps, an edited, removed, unreadable and reordered line, and the 404/422 cases).
+7. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `pass 71`, `fail 0`. `npm run typecheck` and `npm run build` also finish without errors, and the build lists `/runs/[id]/audit` and `/runs/[id]/trace/[visualId]`.
+8. 💻 **Clean up.** Restore anything you renamed or edited in `runs\<id>\`, stop the API and UI, delete the test runs' folders under `runs\` and their items from the workspaces.
+
+**Not run by Claude:** the live and browser steps (1-5), which need your Entra sign-in and a run taken to `COMPLETED` in Fabric. Claude ran steps 6 and 7.
+
 ---
 
 ## Next tasks
 
-Sections for T-703 and later are added when each task is implemented.
+Sections for T-704 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -723,6 +738,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t604_offline_checks.py` | T-604 | Checks of the report review data, the file endpoint, the role approvals of the Report and regenerating a visual or page |
 | `app/manual_tests/t701_offline_checks.py` | T-701 | Fake-service checks of returning a run, object-level impact, stale marking and its guards, and targeted regeneration |
 | `app/manual_tests/t702_offline_checks.py` | T-702 | Fake-Fabric and Power BI checks of the release approval, Gate G6, the lock, smoke tests, completion and rollback |
+| `app/manual_tests/t703_offline_checks.py` | T-703 | Checks of the tamper-evident event log, the audit timeline and the trace of a visual |
 
 ## Adding a task
 

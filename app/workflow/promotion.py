@@ -442,3 +442,6 @@ def run_deployment(
             )
     finally:
         release_lock(started.lock)
+        from app.workflow import audit  # avoids a circular import
+
+        audit.record(store, runs_root, run_id)

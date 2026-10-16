@@ -2,6 +2,8 @@
 // all decisions (states, next actions, validation) come from the API.
 
 import type {
+  AuditPage,
+  TraceResult,
   ApprovalBody,
   ApprovalRecord,
   ApprovalResult,
@@ -257,6 +259,10 @@ export const api = {
     apiFetch<{ report: ValidationRun; run: RunDetail }>(`/runs/${encodeURIComponent(id)}/report/validate`, {
       method: "POST",
     }),
+  getAudit: (id: string, offset = 0, limit = 200) =>
+    apiFetch<AuditPage>(`/runs/${encodeURIComponent(id)}/audit?offset=${offset}&limit=${limit}`),
+  getTrace: (id: string, visualId: string) =>
+    apiFetch<TraceResult>(`/runs/${encodeURIComponent(id)}/trace?visual_id=${encodeURIComponent(visualId)}`),
   listWorkspaces: () => apiFetch<Workspace[]>("/fabric/workspaces"),
   listLakehouses: (workspaceId: string) =>
     apiFetch<Lakehouse[]>(
