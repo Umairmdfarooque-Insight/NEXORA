@@ -82,7 +82,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-702 | Promotion deployment, smoke tests and rollback | M7 | Done | task/T-702-promotion-deployment-smoke-tests-rollback |
 | T-703 | Audit trail and traceability view | M7 | Done | task/T-703-audit-trail-traceability-view |
 | T-704 | Observability | M7 | Done | task/T-704-observability |
-| T-705 | Security hardening | M7 | Not started |  |
+| T-705 | Security hardening | M7 | Done | task/T-705-security-hardening |
 | T-706 | End-to-end vertical slice acceptance | M7 | Not started |  |
 
 ## Milestone exit checks

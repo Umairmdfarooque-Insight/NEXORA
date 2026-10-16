@@ -4,7 +4,7 @@ from pathlib import Path
 
 import mimetypes
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import FileResponse
 
 from app.api.deps import (
@@ -25,6 +25,7 @@ from app.api.deps import (
     get_source_llm,
     get_sql_connector_factory,
     get_store,
+    get_workspace_lister,
 )
 from app.api.schemas import (
     AnalyzeRelationshipsRequest,
@@ -69,6 +70,7 @@ from app.api.schemas import (
 )
 from app.api.security import Principal, current_user
 from app.connectors.fabric_api import FabricApiClient
+from app.security.run_access import RunAccessDenied, can_access
 from app.store.base import RunStore
 from app.workflow.approval import ApprovalRecord, check_g1, list_approvals, perform
 from app.workflow.clarification import (
@@ -125,8 +127,23 @@ from app.workflow.regenerate_stale import StaleServices, regenerate_stale
 from app.workflow.promotion import Services as PromotionServices, run_deployment, start_deployment
 from app.workflow.states import RunState
 
+def authorize_run(
+    request: Request,
+    user: Principal = Depends(current_user),
+    store: RunStore = Depends(get_store),
+    workspaces=Depends(get_workspace_lister),
+) -> None:
+    """T-705: on every route with a run id, the user must have created the run or be able to access its
+    workspace (checked through Fabric, cached for 5 minutes). Otherwise 403 FORBIDDEN."""
+    run_id = request.path_params.get("run_id")
+    if run_id is None:
+        return
+    if not can_access(store.get(run_id), user.oid, user.upn, workspaces):
+        raise RunAccessDenied(run_id)
+
+
 router = APIRouter(
-    prefix="/runs", tags=["runs"], dependencies=[Depends(current_user)]
+    prefix="/runs", tags=["runs"], dependencies=[Depends(current_user), Depends(authorize_run)]
 )
 
 def detail(run, runs_root: Path, warnings: list[str] | None = None) -> RunDetail:
@@ -165,8 +182,10 @@ def list_runs(
     state: RunState | None = None,
     limit: int = Query(50, ge=1, le=200),
     store: RunStore = Depends(get_store),
+    user: Principal = Depends(current_user),
+    workspaces=Depends(get_workspace_lister),
 ):
-    runs = store.list(state, limit=ALL_RUNS)
+    runs = [r for r in store.list(state, limit=ALL_RUNS) if can_access(r, user.oid, user.upn, workspaces)]
     return RunList(
         items=[RunSummary.from_run(r) for r in runs[:limit]], total=len(runs)
     )

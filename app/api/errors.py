@@ -56,6 +56,8 @@ from app.workflow.report_stage import ReportPlanInvalid
 from app.workflow.report_review import RegenerationOutOfScope
 from app.workflow.plan_review import PlanEditInvalid
 from app.workflow.scope import SchemaNotFound, ScopeLocked
+from app.security.llm_guard import PayloadRejected
+from app.security.run_access import RunAccessDenied
 from app.workflow.promotion import HashMismatch, TargetBusy
 from app.workflow.scope_guard import ScopeViolation
 from app.workflow.stale import StaleArtifacts
@@ -220,6 +222,15 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StaleArtifacts)
     async def stale_artifacts(request: Request, exc: StaleArtifacts):
         return error_response(409, "STALE_ARTIFACTS", str(exc), {"stale": exc.names})
+
+    @app.exception_handler(RunAccessDenied)
+    async def run_access_denied(request: Request, exc: RunAccessDenied):
+        return error_response(403, "FORBIDDEN", str(exc), {"run_id": exc.run_id})
+
+    @app.exception_handler(PayloadRejected)
+    async def payload_rejected(request: Request, exc: PayloadRejected):
+        logger.warning("The model payload was rejected: %s", exc.reason)
+        return error_response(422, "PAYLOAD_REJECTED", str(exc), {"reason": exc.reason})
 
     @app.exception_handler(HashMismatch)
     async def hash_mismatch(request: Request, exc: HashMismatch):

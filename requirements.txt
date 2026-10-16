@@ -1,6 +1,7 @@
 openai
 python-dotenv
 azure-identity
+azure-keyvault-secrets
 requests
 pydantic
 pyodbc

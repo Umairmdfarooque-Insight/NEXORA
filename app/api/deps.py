@@ -82,6 +82,17 @@ def get_promotion_items_client(
     return FabricItemsClient(token_provider=obo_token_provider(msal_app, token, FABRIC_SCOPE), allow_any_workspace=True)
 
 
+def get_workspace_lister(token: str = Depends(user_token)):
+    """What run authorization asks Fabric (T-705): the workspaces the signed-in user can access, read as the
+    user (OBO). Built lazily, so a run its creator opens never calls Fabric."""
+
+    def list_workspaces() -> list[dict]:
+        client = FabricApiClient(token_provider=obo_token_provider(get_msal_app(), token, FABRIC_SCOPE))
+        return client.list_workspaces()
+
+    return list_workspaces
+
+
 def get_bridge_llm() -> BridgeLlm:
     return default_bridge_llm()
 
