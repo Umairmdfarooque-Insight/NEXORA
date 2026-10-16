@@ -199,12 +199,17 @@ def raise_data_gap(
 
 
 def raise_data_gaps(
-    store: RunStore, runs_root: Path, run_id: str, descriptions: list[str], actor: str
+    store: RunStore,
+    runs_root: Path,
+    run_id: str,
+    descriptions: list[str],
+    actor: str,
+    states: tuple[RunState, ...] = GAP_STATES,
 ) -> Run:
     """Record one or more data gaps and move the run to NEEDS_INPUT once."""
     run = store.get(run_id)
-    if run.state not in GAP_STATES:
-        raise WrongState("Raising a data gap", run.state, GAP_STATES)
+    if run.state not in states:
+        raise WrongState("Raising a data gap", run.state, states)
     lines = [
         json.dumps(
             DataGap(

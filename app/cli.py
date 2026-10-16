@@ -1,4 +1,4 @@
-"""Nexora command line. Usage: python -m app.cli runs|contract|plan|model|deploy <command> ..."""
+"""Nexora command line. Usage: python -m app.cli runs|contract|plan|report|model|deploy <command> ..."""
 
 import argparse
 import json
@@ -54,6 +54,11 @@ def _build_parser() -> argparse.ArgumentParser:
     plan_cmds = plan.add_subparsers(dest="command", required=True)
     plan_validate = plan_cmds.add_parser("validate", help="Check the plan files in a run folder (runs/<run_id>)")
     plan_validate.add_argument("path")
+
+    report = groups.add_parser("report", help="Validate a run's ReportPlan.json")
+    report_cmds = report.add_subparsers(dest="command", required=True)
+    report_validate = report_cmds.add_parser("validate", help="Check ReportPlan.json against ModelSpec.yaml in a run folder (runs/<run_id>)")
+    report_validate.add_argument("path")
 
     deploy = groups.add_parser("deploy", help="Deploy generated artifacts to the sandbox workspace")
     deploy_cmds = deploy.add_subparsers(dest="command", required=True)
@@ -154,6 +159,38 @@ def _plan_command(args) -> int:
         return 1
     print("VALID")
     return 0
+
+
+def _report_command(args) -> int:
+    import json
+    from pathlib import Path
+
+    from pydantic import ValidationError
+
+    from app.contracts.model_plan import ModelSpec, load_yaml
+    from app.report.plan_validation import validate_report_plan
+
+    folder = Path(args.path)
+    for name in ("ModelSpec.yaml", "ReportPlan.json"):
+        if not (folder / name).is_file():
+            print(f"File not found: {folder / name}", file=sys.stderr)
+            return 2
+    try:
+        spec = load_yaml(ModelSpec, folder / "ModelSpec.yaml")
+        data = json.loads((folder / "ReportPlan.json").read_text(encoding="utf-8"))
+    except (ValidationError, ValueError) as exc:
+        print(f"Could not read the files: {exc}", file=sys.stderr)
+        return 2
+    _, result = validate_report_plan(data, spec)
+    if result.passed:
+        print("VALID")
+        return 0
+    print("INVALID")
+    for c in result.checks:
+        if c.status == "fail":
+            for path in c.evidence.get("paths", [c.description]):
+                print(f"  {c.id}: {path}")
+    return 1
 
 
 def _model_command(args) -> int:
@@ -268,6 +305,8 @@ def main(argv: list[str] | None = None) -> int:
         return _contract_command(args)
     if args.group == "plan":
         return _plan_command(args)
+    if args.group == "report":
+        return _report_command(args)
     if args.group == "deploy":
         return _deploy_command(args)
     if args.group == "model":

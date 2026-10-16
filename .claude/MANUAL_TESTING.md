@@ -572,9 +572,27 @@ The table holds two literal rows, so no Lakehouse connection is needed. If Fabri
 
 ---
 
+## M6 — Report
+
+### T-601 — Report planner
+
+**Before you start:** a run in `MODEL_APPROVED` (the M5 exit), with its model measures carrying DAX (called "run A"), and the API running (`uvicorn app.api.main:app --reload --port 8000`, Swagger at <http://localhost:8000/docs>, **Authorize** with your Entra sign-in). The planner calls the model service, so `.env` needs the `AZURE_OPENAI_*` values.
+
+1. 🌐 **Questions covered.** `POST /runs/{run_A}/report/plan`. **Expected:** `200` with `plan` and `validation` (`passed: true`, checks `RPLAN.1`-`RPLAN.7`). `plan.questions` has one question per contract KPI (`Q-R1`, … with `source` `contract.kpis[<name>]`) and one per contract dimension. A visual such as "Net Revenue by Month" has the KPI's question in `question_ids`, and every question appears in some visual's `question_ids` (or in `unanswered_questions`). Visual ids are `v1`, `v2`, …; at most 8 visuals per page; every bound measure, column and hierarchy is one of the model's. The run is still `MODEL_APPROVED`, and `runs\<run_A>\ReportPlan.json` and `runs\<run_A>
+eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPlan` (`draft`). Calling it again with nothing changed gives the same version 1 and makes no new model call.
+2. 🌐 **Bad reference caught.** In `runs\<run_A>\ReportPlan.json` change a visual's `{"measure": "Net Revenue"}` to `{"measure": "Net Revenue X"}`. Then `GET /runs/{run_A}/report/plan`, or `python -m app.cli report validate runs\<run_A>` (exit 1). **Expected:** `RPLAN.2` fails with `v1.fields.values[0]: measure 'Net Revenue X' is not in the approved model` (the visual and the field). Restore the file afterwards. Also try `"type": "pieChart"` (`RPLAN.5` lists the allowed types) and giving two visuals the same id (`RPLAN.4`).
+3. 🌐 **No invented measures.** On a second run (run B) in `MODEL_APPROVED` whose contract has a KPI the model has no measure for (for example, a fixture contract with an extra KPI "Customer Churn" saved as `BusinessContract.yaml`), `POST /runs/{run_B}/report/plan`. **Expected:** `200`, the KPI's question is in `plan.unanswered_questions` with the reason "The approved model has no measure for KPI 'Customer Churn'", no visual answers it, `ModelSpec.yaml` has no new measure, `runs\<run_B>\data_gaps.jsonl` has an entry for it and the run is `NEEDS_INPUT` with `resume_state: MODEL_APPROVED` ("Return to the model or drop the question"). `ReportPlan` is registered as `needs_input`.
+4. 💻 **Errors.** `POST /runs/{id}/report/plan` on a run in another state gives `409 WRONG_STATE`; on a run without an approved model `404 NOT_FOUND`; if `ModelSpec.yaml` was edited after approval `409 STALE_VERSION`; if the model's answer is unusable twice `502 LLM_INVALID_OUTPUT` with nothing saved.
+5. 💻 **Offline checks.** `python -m app.manual_tests.t601_offline_checks`. **Expected:** `All checks passed.` (the questions, RPLAN.1-RPLAN.7, the retry, unanswered questions, `POST`/`GET /report/plan`, caching and the error cases).
+6. 💻 **Clean up.** Restore any hand-edited `ReportPlan.json` (or call `POST /report/plan` again), and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1-3), which need your sign-in and the model service. Claude ran steps 4 and 5 offline.
+
+---
+
 ## Next tasks
 
-Sections for T-601 and later are added when each task is implemented.
+Sections for T-602 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -609,6 +627,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t505_offline_checks.py` | T-505 | Fake-service checks of the repair policy, the `repair` graph, the scope guard and `model/repair` |
 | `app/manual_tests/t506_offline_checks.py` | T-506 | Fake-service checks of bridge generation, the notebook, G4.BRIDGE.* and `model/bridges/{id}/generate` |
 | `app/manual_tests/t507_offline_checks.py` | T-507 | Checks of the model review data, the role approvals of the SemanticModel and the move to MODEL_APPROVED |
+| `app/manual_tests/t601_offline_checks.py` | T-601 | Fake-LLM checks of the report questions, RPLAN.1-RPLAN.7, the planner and `report/plan` |
 
 ## Adding a task
 

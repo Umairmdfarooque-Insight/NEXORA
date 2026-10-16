@@ -15,6 +15,7 @@ from app.model.bridge_sql import LlmCall as BridgeLlm, default_bridge_llm
 from app.model.recon_sql import LlmCall as ReconLlm, default_recon_llm
 from app.compiler.requirement_compiler import LlmCall, default_llm
 from app.model.dax_generator import LlmCall as DaxLlm, default_dax_llm
+from app.report.planner import LlmCall as ReportLlm, default_report_llm
 from app.discovery.relationship_candidates import RelationshipLlm, default_relationship_llm
 from app.discovery.source_resolver import SourceLlm, default_source_llm
 from app.config import PROJECT_ROOT
@@ -56,6 +57,10 @@ def get_feasibility_llm() -> SourceLlm:
 
 def get_dax_llm() -> DaxLlm:
     return default_dax_llm()
+
+
+def get_report_llm() -> ReportLlm:
+    return default_report_llm()
 
 
 def get_bridge_llm() -> BridgeLlm:
