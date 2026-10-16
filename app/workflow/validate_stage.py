@@ -19,6 +19,7 @@ from app.contracts.validation_report import ValidationRun, load_report, save_rep
 from app.deploy.fabric_items import FabricItemsClient, FabricOperationFailed, get_sandbox_workspace_id
 from app.model.recon_sql import LlmCall, ReconSql, propose_recon_sql
 from app.model.tmdl_reader import read_model
+from app.model.bridge_checks import check_bridges
 from app.model.validation_config import load_tolerance
 from app.model.validators import (
     Context,
@@ -84,6 +85,7 @@ def run_validation(
     recon_llm: LlmCall,
     user_upn: str | None = None,
     repair_attempt: int | None = None,
+    baseline: dict[str, float | None] | None = None,
 ) -> ValidationRun:
     """Deploy `folder` to the sandbox, refresh it, run the G4 checks and append the result to
     ValidationReport.json. It changes no run state and registers no artifact: its callers do
@@ -107,6 +109,7 @@ def run_validation(
     ctx = Context(
         spec=spec, contract=env.contract, tmdl=tmdl, tolerance=env.tolerance, workspace_id=env.workspace_id,
         dataset_id="", pbi=pbi, sql_connector=sql_connector_factory(env.scope), recon_for=recon_for, user_upn=user_upn,
+        baseline=baseline or {},
     )
 
     checks = []
@@ -135,6 +138,7 @@ def run_validation(
         with ctx.sql_connector.connect() as connection:
             checks += check_relationships(ctx, connection)
             checks += check_reconciliation(ctx, connection)
+            checks += check_bridges(ctx, connection)
         checks += check_rls(ctx)
 
     report = load_report(env.run_dir / REPORT_FILE, env.run_id)

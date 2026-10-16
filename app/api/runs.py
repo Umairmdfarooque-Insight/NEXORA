@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import (
     get_connector_factory,
+    get_bridge_llm,
     get_dax_llm,
     get_items_client,
     get_powerbi_client,
@@ -37,6 +38,7 @@ from app.api.schemas import (
     HarvestResponse,
     HarvestSummary,
     KpiEditRequest,
+    BridgeGenerateResponse,
     MeasuresResponse,
     ModelGenerateResponse,
     ModelValidateResponse,
@@ -88,6 +90,8 @@ from app.deploy.fabric_items import FabricItemsClient
 from app.model.recon_sql import LlmCall as ReconLlm
 from app.repair.models import RepairResult
 from app.repair.service import repair as repair_model
+from app.model.bridge_sql import LlmCall as BridgeLlm
+from app.workflow.bridge_model_stage import generate_bridge
 from app.workflow.model_stage import generate_model
 from app.workflow.validate_stage import validate_model
 from app.workflow.plan_review import check_g3, edit_plan
@@ -516,6 +520,28 @@ def model_repair(
         llm=dax_llm, items_client=items, pbi=pbi, sql_connector_factory=sql_factory, recon_llm=recon_llm,
         user_upn=user.upn, actor=user.upn,
     )
+
+
+@router.post("/{run_id}/model/bridges/{bridge_id}/generate", response_model=BridgeGenerateResponse)
+def model_bridge_generate(
+    run_id: str,
+    bridge_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    items: FabricItemsClient = Depends(get_items_client),
+    pbi: PowerBiClient = Depends(get_powerbi_client),
+    sql_factory=Depends(get_sql_connector_factory),
+    lakehouse_factory=Depends(get_connector_factory),
+    recon_llm: ReconLlm = Depends(get_recon_llm),
+    bridge_llm: BridgeLlm = Depends(get_bridge_llm),
+    user: Principal = Depends(current_user),
+):
+    version, entry, _ = generate_bridge(
+        store, runs_root, run_id, bridge_id,
+        items_client=items, pbi=pbi, sql_connector_factory=sql_factory, recon_llm=recon_llm,
+        bridge_llm=bridge_llm, lakehouse_connector_factory=lakehouse_factory, user_upn=user.upn, actor=user.upn,
+    )
+    return BridgeGenerateResponse(version=version, validation=entry)
 
 
 @router.patch("/{run_id}/plan", response_model=PlanEditResponse, response_model_by_alias=True)

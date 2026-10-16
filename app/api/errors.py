@@ -46,7 +46,10 @@ from app.workflow.compile_stage import WrongState
 from app.workflow.harvest_stage import ScopeMissing
 from app.workflow.inventory_review import NotACandidate
 from app.model.tmdl_generator import ModelGenerationError
+from app.model.bridge_model import BridgeError
+from app.model.bridge_sql import BridgeSqlRejected
 from app.repair.service import NothingToRepair, UnsupportedArtifact
+from app.workflow.bridge_model_stage import BridgeNotApproved
 from app.workflow.model_stage import ModelSpecInvalid
 from app.workflow.plan_review import PlanEditInvalid
 from app.workflow.scope import SchemaNotFound, ScopeLocked
@@ -203,6 +206,18 @@ def register_error_handlers(app: FastAPI) -> None:
             str(exc),
             {"failed_checks": [c.model_dump(mode="json") for c in exc.failed]},
         )
+
+    @app.exception_handler(BridgeNotApproved)
+    async def bridge_not_approved(request: Request, exc: BridgeNotApproved):
+        return error_response(409, "BRIDGE_NOT_APPROVED", str(exc), {"bridge_id": exc.bridge_id})
+
+    @app.exception_handler(BridgeError)
+    async def bridge_error(request: Request, exc: BridgeError):
+        return error_response(422, "VALIDATION_ERROR", str(exc))
+
+    @app.exception_handler(BridgeSqlRejected)
+    async def bridge_sql_rejected(request: Request, exc: BridgeSqlRejected):
+        return error_response(422, "VALIDATION_ERROR", f"No usable derivation SQL could be produced: {exc.reason}")
 
     @app.exception_handler(NothingToRepair)
     async def nothing_to_repair(request: Request, exc: NothingToRepair):

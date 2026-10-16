@@ -34,6 +34,7 @@ HTTP_TIMEOUT = 60
 MAX_PAGES = 1000
 
 SEMANTIC_MODEL = "SemanticModel"
+NOTEBOOK = "Notebook"
 
 
 class TargetNotAllowed(Exception):
@@ -60,6 +61,14 @@ class FabricOperationFailed(FabricUpstreamError):
     def __init__(self, message: str, request_id: str | None = None, details: dict | None = None):
         self.details = details or {}
         super().__init__(message, request_id)
+
+
+class NotebookRunFailed(FabricOperationFailed):
+    """A notebook run ended without success; `run_id` identifies it in Fabric's monitoring."""
+
+    def __init__(self, message: str, request_id: str | None, details: dict, run_id: str):
+        self.run_id = run_id
+        super().__init__(message, request_id, details)
 
 
 def get_sandbox_workspace_id() -> str | None:
@@ -228,34 +237,81 @@ class FabricItemsClient:
                 )
             self.wait_for_operation(location)
 
-    def upsert_semantic_model(self, workspace_id: str, display_name: str, tmdl_dir: Path) -> dict:
+    def _upsert(self, workspace_id: str, display_name: str, item_type: str, collection: str, definition: dict, label: str) -> dict:
+        """Create the item, or update its definition if one with that name exists (any case)."""
         self._check_target(workspace_id)
-        definition = {"parts": tmdl_parts(tmdl_dir)}
-        base = f"{FABRIC_API}/workspaces/{workspace_id}/semanticModels"
+        base = f"{FABRIC_API}/workspaces/{workspace_id}/{collection}"
 
         same_name = self._named(self._list_items(workspace_id), display_name)
         for item in same_name:
-            if item.get("type") != SEMANTIC_MODEL:
+            if item.get("type") != item_type:
                 raise NameConflict(display_name, str(item.get("type", "unknown")))
         if same_name:
             item_id = same_name[0]["id"]
-            response = self._call(
-                "POST", f"{base}/{item_id}/updateDefinition", {"definition": definition}
-            )
+            response = self._call("POST", f"{base}/{item_id}/updateDefinition", {"definition": definition})
             self._finish(response)
             return {"item_id": item_id, "operation": "updated"}
 
-        response = self._call(
-            "POST", base, {"displayName": display_name, "definition": definition}
-        )
+        response = self._call("POST", base, {"displayName": display_name, "definition": definition})
         self._finish(response)
         item_id = _body(response).get("id") if response.status_code != 202 else None
         if not item_id:
-            created = self.get_item_by_name(workspace_id, display_name, SEMANTIC_MODEL)
+            created = self.get_item_by_name(workspace_id, display_name, item_type)
             if not created:
                 raise FabricUpstreamError(
-                    "The model was created but could not be found in the workspace",
+                    f"The {label} was created but could not be found in the workspace",
                     _request_id(response),
                 )
             item_id = created["id"]
         return {"item_id": item_id, "operation": "created"}
+
+    def upsert_semantic_model(self, workspace_id: str, display_name: str, tmdl_dir: Path) -> dict:
+        self._check_target(workspace_id)
+        return self._upsert(
+            workspace_id, display_name, SEMANTIC_MODEL, "semanticModels", {"parts": tmdl_parts(tmdl_dir)}, "model"
+        )
+
+    def upsert_notebook(self, workspace_id: str, display_name: str, ipynb: Path) -> dict:
+        """Create or update a notebook (ipynb format) in the sandbox workspace."""
+        self._check_target(workspace_id)
+        payload = base64.b64encode(Path(ipynb).read_bytes()).decode("ascii")
+        definition = {
+            "format": "ipynb",
+            "parts": [{"path": "notebook-content.ipynb", "payload": payload, "payloadType": "InlineBase64"}],
+        }
+        return self._upsert(workspace_id, display_name, NOTEBOOK, "notebooks", definition, "notebook")
+
+    def run_notebook(self, workspace_id: str, item_id: str, timeout_s: int = 900) -> dict:
+        """Run a notebook and wait for it. Returns {"run_id"}; a run that doesn't succeed raises
+        NotebookRunFailed with the run id, and a run that outlasts the timeout is a FabricTimeout."""
+        self._check_target(workspace_id)
+        url = f"{FABRIC_API}/workspaces/{workspace_id}/items/{item_id}/jobs/instances"
+        response = self._call("POST", f"{url}?jobType=RunNotebook", {})
+        location = response.headers.get("Location")
+        if not location:
+            raise FabricUpstreamError("Fabric accepted the notebook run without a location", _request_id(response))
+        run_id = location.rstrip("/").rsplit("/", 1)[-1]
+        deadline = self._clock() + timeout_s
+        while True:
+            polled = self._call("GET", location)
+            body = _body(polled)
+            status = body.get("status")
+            if status == "Completed":
+                return {"run_id": body.get("id") or run_id}
+            if status in ("Failed", "Cancelled", "Deduped"):
+                reason = body.get("failureReason") or {}
+                detail = reason.get("message") or status
+                raise NotebookRunFailed(
+                    f"The notebook run {body.get('id') or run_id} {str(status).lower()}: {detail}",
+                    _request_id(polled),
+                    reason or body,
+                    body.get("id") or run_id,
+                )
+            remaining = deadline - self._clock()
+            if remaining <= 0:
+                raise FabricTimeout(f"The notebook run {run_id} did not finish in time; its state is unknown")
+            try:
+                wait = float(polled.headers.get("Retry-After", DEFAULT_POLL_WAIT))
+            except (TypeError, ValueError):
+                wait = DEFAULT_POLL_WAIT
+            self._sleep(min(max(wait, 1), MAX_RETRY_WAIT, remaining))
