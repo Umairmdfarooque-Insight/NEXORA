@@ -160,6 +160,9 @@ def run_validation(
 
 def register_report(store: RunStore, runs_root: Path, run_id: str, entry: ValidationRun) -> None:
     """Register the report artifact for the latest validation run (after the run was saved)."""
+    from app.observability import telemetry  # T-704: every validation run is a pass or a fail
+
+    telemetry.record_validation(entry.artifact, entry.passed, run_id)
     run_dir = Path(runs_root) / run_id
     data = load_report(run_dir / REPORT_FILE, run_id).model_dump(mode="json")
     run = store.get(run_id)

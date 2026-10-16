@@ -168,6 +168,9 @@ def run_g2(
 
 def save_gate_result(runs_root: Path, run_id: str, result: GateResult) -> str:
     """Write runs/<id>/gates/<gate>-<timestamp>.json. Returns the path relative to the run."""
+    from app.observability import telemetry  # T-704: a gate result is a validation outcome
+
+    telemetry.record_validation(f"gate:{result.gate}", result.passed, run_id)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     relative = f"gates/{result.gate}-{stamp}.json"
     target = Path(runs_root) / run_id / relative

@@ -5,8 +5,11 @@ has no checkpointer or interrupts. The stage service owns state transitions.
 """
 
 import logging
+import time
 
 from langgraph.errors import GraphRecursionError
+
+from app.observability import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +28,22 @@ def run_graph(
         "recursion_limit": recursion_limit,
         "metadata": {"run_id": run_id, "stage": stage},
     }
+    runs: dict[str, int] = {}
+    last = time.time_ns()
     try:
         for chunk in graph.stream(state, config=config, stream_mode="updates"):
+            now = time.time_ns()
             for node, update in chunk.items():
                 path.append(node)
+                runs[node] = runs.get(node, 0) + 1
+                # a span per node run, from when the previous node finished; the attempt is how many
+                # times this node has run in this invocation (a retry or a repair attempt is attempt 2+)
+                telemetry.record_node(stage, node, runs[node], last, now)
                 if update:
                     final.update(update)
+            last = now
     except GraphRecursionError:
+        telemetry.record_error(stage)
         logger.error("stage=%s run_id=%s hit the recursion limit", stage, run_id)
         raise GraphLoopError(f"The {stage} graph did not finish") from None
     final["node_path"] = path
