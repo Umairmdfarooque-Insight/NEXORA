@@ -151,6 +151,9 @@ def return_run(
             approvals_before=returns.count_approvals(runs_root, run_id),
         ),
     )
+    from app.workflow import audit  # avoids a circular import
+
+    audit.record(store, runs_root, run_id)
     return run
 
 

@@ -77,6 +77,10 @@ These are the states from spec §11. Only these transitions are allowed. Anythin
 
 `CREATED` doubles as "requirement draft without blocking questions". The spec has no separate state for it.
 
+## Audit event (T-703)
+
+`runs/<run_id>/events.jsonl`, append-only, one event per line: `{"seq", "at", "type", "actor", "artifact", "version", "hash", "summary", "key", "prev_event_hash"}`. `type` is `state` | `approval` | `artifact` | `gate` | `validation` | `deployment` | `return`. `seq` counts from 1. `prev_event_hash` is the SHA-256 of the canonical JSON of the previous line's event (sorted keys, no spaces), or `sha256:` plus 64 zeros for the first. `key` names what the event came from, so it is logged once. `GET /runs/{id}/audit` adds `first_broken_seq` to the spec's `{"events", "total", "chain_valid"}`, and the trace response adds `other_measures` and `gaps`.
+
 ## Deployment record (T-702)
 
 `RunManifest.deployment`, set when a deployment starts: `deployment_id`, `target_workspace_id`, `started_at`, `finished_at`, `items` (`type`, `item_id`, `hash` = the approved artifact hash, `operation`), `backup_path` (`deploy/backup-<ts>/`, relative to the run folder), `smoke_tests` (`id`, `status` `pass`/`warning`/`fail`, `message`), `outcome` (`completed` | `rolled_back` | `rollback_failed`), and on a failure `error` and `rollback` (`item`, `type`, `action`, `status`). The final release approval is an approval record with artifact `Release`, role `release_approver` and the hash of the approved model and report hashes together.

@@ -327,9 +327,13 @@ def perform(store: RunStore, runs_root: Path, run_id: str, artifact: str, action
     earlier stage (T-701), the artifacts that the newly approved one made stale are marked, and the
     return is closed once the run is approved again as far as it was."""
     outcome = _perform(store, runs_root, run_id, artifact, action, *args, **kwargs)
+    from app.workflow import audit  # avoids a circular import
+
+    audit.record(store, runs_root, run_id)  # T-703: the action and what it changed are in the audit log
     if outcome.approval.action is Action.ACCEPT:
         from app.workflow.impact import on_accept  # avoids a circular import
 
         on_accept(store, runs_root, run_id)
+        audit.record(store, runs_root, run_id)
         outcome.run = store.get(run_id)
     return outcome

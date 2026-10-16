@@ -453,6 +453,7 @@ export default function ReportReviewPage() {
                       >
                         Regenerate
                       </Button>
+                      <Link href={`/runs/${encodeURIComponent(id)}/trace/${encodeURIComponent(v.id)}`}>Trace</Link>
                     </div>
                     <Caption1 className={styles.detail}>
                       Answers: {v.questions.length === 0 ? "no question" : v.questions.map((q) => `${q.id} ${q.text}`).join("; ")}
