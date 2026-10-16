@@ -31,6 +31,7 @@ from app.workflow.harvest_stage import canonical_hash, load_inventory, write_jso
 from app.workflow.inventory_review import raise_data_gaps
 from app.workflow.llm_cache import request_key, save_answer, saved_answer
 from app.workflow.run import ArtifactRef, Run, utc_now
+from app.workflow.stale import assert_fresh
 from app.workflow.source_stage import ARTIFACT as RESOLUTION_ARTIFACT
 from app.workflow.source_stage import CURRENT as RESOLUTION_FILE
 from app.workflow.states import RunState
@@ -40,6 +41,11 @@ CURRENT = "Feasibility.json"
 CACHE = "feasibility_suggestions.json"
 FEASIBILITY_STATES = (RunState.DATA_PROFILED,)
 LLM_ATTEMPTS = 2
+
+
+def descriptions_wanted(kpis: list, only: set[str] | None) -> bool:
+    """True if a KPI that was asked for (all of them, with no restriction) is a data gap."""
+    return any(k.status is FeasibilityStatus.DATA_GAP and (only is None or k.kpi.casefold() in only) for k in kpis)
 
 
 def load_resolution(runs_root: Path, run_id: str) -> SourceResolution:
@@ -68,12 +74,19 @@ def _needs(llm: SourceLlm, run_dir: Path, user: str, contract):
 
 
 def check_feasibility(
-    store: RunStore, runs_root: Path, run_id: str, llm: SourceLlm, actor: str = "system"
+    store: RunStore,
+    runs_root: Path,
+    run_id: str,
+    llm: SourceLlm,
+    actor: str = "system",
+    restrict: set[str] | None = None,
 ) -> tuple[FeasibilityReport, Run]:
-    """Check every KPI of the contract against the run's SourceResolution."""
+    """Check every KPI of the contract against the run's SourceResolution. `restrict` (T-701) names
+    the KPIs to check again (`kpi:<name>`); the other KPIs keep their saved result."""
     run = store.get(run_id)
     if run.state not in FEASIBILITY_STATES:
         raise WrongState("Checking feasibility", run.state, FEASIBILITY_STATES)
+    assert_fresh(run.artifacts, (RESOLUTION_ARTIFACT,), "Checking feasibility")
     resolution = load_resolution(runs_root, run_id)
     inventory = load_inventory(runs_root, run_id)
     contract = load_current_contract(runs_root, run_id)
@@ -87,6 +100,10 @@ def check_feasibility(
         user = json.dumps(build_payload(contract, columns), sort_keys=True)
         needs = _needs(llm, run_dir, user, contract)
     kpis = evaluate(contract, resolution, columns, needs)
+    only = {o[4:].casefold() for o in restrict if o.startswith("kpi:")} if restrict is not None else None
+    if only is not None and (run_dir / CURRENT).is_file():
+        saved = {k.kpi.casefold(): k for k in FeasibilityReport.model_validate_json((run_dir / CURRENT).read_text(encoding="utf-8")).kpis}
+        kpis = [k if k.kpi.casefold() in only else saved.get(k.kpi.casefold(), k) for k in kpis]
 
     based_on = {RESOLUTION_ARTIFACT: canonical_hash(resolution.to_dict())}
     if CONTRACT_ARTIFACT in run.artifacts:
@@ -119,12 +136,12 @@ def check_feasibility(
         )
         store.save(run)
 
-    if gaps:
+    if gaps and descriptions_wanted(kpis, only):
         descriptions = [
             f"KPI {k.kpi!r} can't be calculated from the available data: "
             + "; ".join(f"{m.need} ({m.reason})" for m in k.missing)
             for k in kpis
-            if k.status is FeasibilityStatus.DATA_GAP
+            if k.status is FeasibilityStatus.DATA_GAP and (only is None or k.kpi.casefold() in only)
         ]
         run = raise_data_gaps(store, runs_root, run_id, descriptions, actor)
     else:

@@ -49,6 +49,8 @@ from app.workflow.report_stage import ARTIFACT as PBIR_ARTIFACT
 from app.workflow.report_stage import PUBLISH_FILE, REPORT_DIR
 from app.workflow.report_validate_stage import ReportEnvironment, settle
 from app.workflow.roles import load_roles
+from app.workflow.returns import reopened_after
+from app.workflow.stale import assert_fresh
 from app.workflow.run import Run, utc_now
 from app.workflow.states import RunState
 from app.workflow.validate_stage import REPORT_FILE
@@ -136,10 +138,17 @@ def g5_gate(entry: ValidationRun | None, live_hash: str) -> GateResult:
     return GateResult(gate="G5", artifact=ARTIFACT, artifact_hash=live_hash, passed=entry.passed and current, checked_at=entry.started_at, checks=checks)
 
 
-def role_statuses(records: list[ApprovalRecord], roles: list[str], live_hash: str) -> list[RoleStatus]:
+def role_statuses(
+    records: list[ApprovalRecord], roles: list[str], live_hash: str, after: int | None = None
+) -> list[RoleStatus]:
+    """`after` (T-701): the approval records before this position (the run was returned then) don't count."""
     out = []
     for role in roles:
-        mine = [r for r in records if r.artifact == ARTIFACT and r.role == role and r.action in (Action.ACCEPT, Action.REJECT)]
+        mine = [
+            r for i, r in enumerate(records)
+            if r.artifact == ARTIFACT and r.role == role and r.action in (Action.ACCEPT, Action.REJECT)
+            and (after is None or i >= after)
+        ]
         if not mine:
             out.append(RoleStatus(role=role, status="pending"))
             continue
@@ -234,7 +243,7 @@ def review(store: RunStore, runs_root: Path, run_id: str) -> ReportReview:
         validation_current=latest is not None and latest.artifact_hash == live_hash,
         gate=g5_gate(latest, live_hash),
         approvals_required=list(ROLES),
-        approvals_status=role_statuses(records, list(ROLES), live_hash),
+        approvals_status=role_statuses(records, list(ROLES), live_hash, reopened_after(runs_root, run_id)),
         approvals_done=done,
     )
 
@@ -354,7 +363,8 @@ def decide_report(
     actor = user["upn"]
     gate = gate_ref = None
     if action is Action.ACCEPT:
-        if next((s for s in role_statuses(records, [acting], live_hash) if s.status == "approved"), None):
+        assert_fresh(run.artifacts, (PBIR_ARTIFACT, PLAN_ARTIFACT, "TMDLModel"), "Approving the report")
+        if next((s for s in role_statuses(records, [acting], live_hash, reopened_after(runs_root, run_id)) if s.status == "approved"), None):
             raise AlreadyApproved(f"{acting} has already approved this version of the report")
         run_dir = Path(runs_root) / run_id
         gate = g5_gate(load_report(run_dir / REPORT_FILE, run_id).latest("Report"), live_hash)
@@ -378,7 +388,7 @@ def decide_report(
     _append(runs_root, record)
 
     if action is Action.ACCEPT:
-        if all(s.status == "approved" for s in role_statuses([*records, record], list(ROLES), live_hash)):
+        if all(s.status == "approved" for s in role_statuses([*records, record], list(ROLES), live_hash, reopened_after(runs_root, run_id))):
             run = store.get(run_id)
             for name in (PBIR_ARTIFACT, PLAN_ARTIFACT):
                 if name in run.artifacts:

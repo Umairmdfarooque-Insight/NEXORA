@@ -5,6 +5,7 @@ A plain function, not a graph: generation is deterministic and has no LLM. The r
 changes (T-405's Gate G3 moves it to PLAN_APPROVED).
 """
 
+from collections.abc import Callable
 from pathlib import Path
 
 import yaml
@@ -21,6 +22,7 @@ from app.workflow.clarification import NotFound
 from app.workflow.compile_stage import ARTIFACT as CONTRACT_ARTIFACT
 from app.workflow.compile_stage import WrongState, load_current_contract
 from app.workflow.conformed import load_conformed
+from app.workflow.feasibility_stage import ARTIFACT as FEASIBILITY_ARTIFACT
 from app.workflow.feasibility_stage import CURRENT as FEASIBILITY_FILE
 from app.workflow.feasibility_stage import load_resolution
 from app.workflow.gates import GateResult
@@ -29,8 +31,10 @@ from app.workflow.harvest_stage import canonical_hash, load_inventory
 from app.workflow.inventory_review import approved_exception_ids
 from app.workflow.run import ArtifactRef, Run, utc_now
 from app.workflow.source_stage import ARTIFACT as RESOLUTION_ARTIFACT
+from app.workflow.stale import assert_fresh
 from app.workflow.states import RunState
 
+PlanMerge = Callable[[ModelSpec, ExecutionPlan, ModelSpec, ExecutionPlan], tuple[ModelSpec, ExecutionPlan]]
 MODEL_ARTIFACT = "ModelSpec"
 PLAN_ARTIFACT = "ExecutionPlan"
 MODEL_FILE = "ModelSpec.yaml"
@@ -79,11 +83,19 @@ def _register(store: RunStore, run: Run, name: str, filename: str, model, based_
     )
 
 
-def generate_plan(store: RunStore, runs_root: Path, run_id: str) -> tuple[ExecutionPlan, ModelSpec, GateResult]:
-    """Generate the ModelSpec and ExecutionPlan of a run whose KPIs have been checked."""
+def generate_plan(
+    store: RunStore, runs_root: Path, run_id: str, merge: PlanMerge | None = None
+) -> tuple[ExecutionPlan, ModelSpec, GateResult]:
+    """Generate the ModelSpec and ExecutionPlan of a run whose KPIs have been checked.
+
+    `merge(old_model, old_plan, new_model, new_plan)` (T-701, targeted regeneration) may replace the
+    generated pair, for example by keeping every object of the saved files except the changed ones. It
+    is called only when saved files exist and can be read.
+    """
     run = store.get(run_id)
     if run.state not in PLAN_STATES:
         raise WrongState("Planning the model", run.state, PLAN_STATES)
+    assert_fresh(run.artifacts, (RESOLUTION_ARTIFACT, FEASIBILITY_ARTIFACT), "Planning the model")
     inventory = load_inventory(runs_root, run_id)  # 404 before a harvest
     contract = load_current_contract(runs_root, run_id)
     if contract is None:
@@ -108,6 +120,11 @@ def generate_plan(store: RunStore, runs_root: Path, run_id: str) -> tuple[Execut
     )
 
     run_dir = Path(runs_root) / run_id
+    if merge is not None:
+        old_model = _load_old(ModelSpec, run_dir / MODEL_FILE)
+        old_plan = _load_old(ExecutionPlan, run_dir / PLAN_FILE)
+        if old_model is not None and old_plan is not None:
+            model, plan = merge(old_model, old_plan, model, plan)
     changed = False
     for filename, new, cls in ((MODEL_FILE, model, ModelSpec), (PLAN_FILE, plan, ExecutionPlan)):
         if new is plan:

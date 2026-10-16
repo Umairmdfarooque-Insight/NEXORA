@@ -7,6 +7,7 @@ hybrid orchestration (CONTRACTS.md#stage-graphs) goes through it.
 from typing import Protocol
 
 from app.workflow.run import IllegalTransition, Run  # noqa: F401  (re-exported)
+from app.workflow.stale import StaleArtifacts  # noqa: F401  (re-exported)
 from app.workflow.states import RunState
 
 

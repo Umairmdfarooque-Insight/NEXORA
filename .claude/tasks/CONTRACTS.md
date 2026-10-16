@@ -63,17 +63,36 @@ These are the states from spec §11. Only these transitions are allowed. Anythin
 | `PLAN_APPROVED` | `MODEL_GENERATING`, `DATA_PROFILED` (plan reopened), `CREATED` |
 | `MODEL_GENERATING` | `MODEL_FAILED`, `MODEL_APPROVED` |
 | `MODEL_FAILED` | `MODEL_GENERATING` (repair) |
-| `MODEL_APPROVED` | `REPORT_GENERATING`, `CREATED`, `PLAN_APPROVED` |
+| `MODEL_APPROVED` | `REPORT_GENERATING`, `CREATED`, `PLAN_APPROVED`, `DATA_PROFILED` (returned to planning, T-701) |
 | `REPORT_GENERATING` | `REPORT_FAILED`, `REPORT_APPROVED` |
 | `REPORT_FAILED` | `REPORT_GENERATING` (repair), `MODEL_GENERATING` (model defect) |
-| `REPORT_APPROVED` | `DEPLOYING`, `CREATED`, `PLAN_APPROVED`, `MODEL_GENERATING` |
+| `REPORT_APPROVED` | `DEPLOYING`, `CREATED`, `PLAN_APPROVED`, `DATA_PROFILED`, `MODEL_GENERATING` |
 | `DEPLOYING` | `COMPLETED`, `ROLLED_BACK`, `NEEDS_INPUT` |
 | `ROLLED_BACK` | `DEPLOYING` |
 | `COMPLETED` | — (terminal) |
 | any state except `COMPLETED` | `NEEDS_INPUT` |
 | `NEEDS_INPUT` | the stored `resume_state`, or `CREATED` |
 
+`DEPLOYING` is refused (`409 STALE_ARTIFACTS`, before the legality check) while any artifact has status `stale` (T-701).
+
 `CREATED` doubles as "requirement draft without blocking questions". The spec has no separate state for it.
+
+## Return log and impact (T-701)
+
+`runs/<run_id>/returns.jsonl` is append-only, one JSON object per line. A `returned` event records a return to `REQUIREMENT_ANALYSIS` (state `CREATED`), `PLANNING` (`DATA_PROFILED`) or `MODEL` (`PLAN_APPROVED`):
+
+```json
+{ "event": "returned", "return_id": "…", "run_id": "…", "at": "…", "user": { "oid": "…", "upn": "user@contoso.com" },
+  "to": "REQUIREMENT_ANALYSIS", "from_state": "REPORT_APPROVED", "new_state": "CREATED", "reason": "Exclude tax",
+  "baseline": { "BusinessContract": { "version": 2, "hash": "sha256:…", "path": "BusinessContract.yaml", "status": "approved" } },
+  "unlocked": ["BusinessContract"], "approvals_before": 7 }
+```
+
+- `baseline` is the version and hash of every artifact when the run was first returned; a second return while one is open keeps the first baseline and `from_state`. Earlier versions stay on disk, so the baseline can be read back.
+- `approvals_before` is the number of records `approvals.jsonl` held: model and report approvals before that position no longer count (a return reopens them even if the files come out identical).
+- A `resolved` event (`event`, `return_id`, `at`, `reason`) closes the return once nothing is stale and the run is approved again as far as `from_state`.
+
+`runs/<run_id>/Impact.json` holds the impact of the open return: `changed` (`artifact` and `objects`), `stale` (`artifact`, `objects`, `reason`, `removals`), `prior_status` (the status an artifact had before it was marked `stale`) and `fresh` (artifacts checked again that came out unchanged, by hash). Object names: `kpi:<name>`, `entity:<name>`, `measure:<name>`, `table:<name>`, `relationship:<name>`, `roles`, `file:<path in the TMDL folder>`, `visual:<page name>/<visual id>` in the ReportPlan and `visual:p<n>/<visual id>` in the report. `*` means the whole artifact. `removals` are the objects marked for removal (a deleted KPI's measure and visuals): shown for review, never dropped silently.
 
 ## Stage graphs
 
@@ -121,7 +140,7 @@ Every API error uses this body:
 | 401 | `UNAUTHENTICATED`, `TOKEN_EXPIRED` | Missing or invalid token |
 | 403 | `FORBIDDEN`, `CONSENT_REQUIRED`, `TARGET_NOT_ALLOWED` | Authenticated but not allowed |
 | 404 | `RUN_NOT_FOUND`, `NOT_FOUND`, `SCHEMA_NOT_FOUND` | Unknown resource |
-| 409 | `ILLEGAL_TRANSITION`, `WRONG_STATE`, `GATE_FAILED`, `CONTRACT_LOCKED`, `STALE_VERSION`, `SCOPE_LOCKED`, `QUESTION_CONFLICT`, `ALREADY_APPROVED`, `HASH_MISMATCH`, `MAPPING_RULES_REQUIRED`, `NO_FEASIBLE_KPIS`, `NAME_CONFLICT`, `BRIDGE_NOT_APPROVED` | Conflicts with the current state |
+| 409 | `ILLEGAL_TRANSITION`, `WRONG_STATE`, `GATE_FAILED`, `CONTRACT_LOCKED`, `STALE_VERSION`, `SCOPE_LOCKED`, `QUESTION_CONFLICT`, `ALREADY_APPROVED`, `HASH_MISMATCH`, `MAPPING_RULES_REQUIRED`, `NO_FEASIBLE_KPIS`, `NAME_CONFLICT`, `BRIDGE_NOT_APPROVED`, `STALE_ARTIFACTS`, `SCOPE_VIOLATION` | Conflicts with the current state |
 | 422 | `VALIDATION_ERROR`, `PROMPT_REJECTED`, `PAYLOAD_REJECTED` | Invalid input, or an LLM payload blocked by the guard (T-705) |
 | 429 | `RATE_LIMITED` | Upstream throttling the caller should retry |
 | 502 | `UPSTREAM_ERROR`, `LLM_INVALID_OUTPUT` | Fabric, Power BI or the LLM returned an error or unusable output |

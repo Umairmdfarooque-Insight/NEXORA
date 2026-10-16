@@ -39,6 +39,8 @@ from app.workflow.gates import GateCheck, GateResult, save_gate_result
 from app.workflow.model_stage import TMDL_ARTIFACT, folder_hash
 from app.workflow.plan_stage import MODEL_ARTIFACT, MODEL_FILE
 from app.workflow.roles import load_roles
+from app.workflow.returns import reopened_after
+from app.workflow.stale import assert_fresh
 from app.workflow.run import Run, utc_now
 from app.workflow.states import RunState
 from app.workflow.validate_stage import REPORT_FILE
@@ -136,10 +138,17 @@ def g4_gate(report_run: ValidationRun | None, live_hash: str) -> GateResult:
     )
 
 
-def role_statuses(records: list[ApprovalRecord], roles: list[str], live_hash: str) -> list[RoleStatus]:
+def role_statuses(
+    records: list[ApprovalRecord], roles: list[str], live_hash: str, after: int | None = None
+) -> list[RoleStatus]:
+    """`after` (T-701): the approval records before this position (the run was returned then) don't count."""
     out = []
     for role in roles:
-        mine = [r for r in records if r.artifact == ARTIFACT and r.role == role and r.action in (Action.ACCEPT, Action.REJECT)]
+        mine = [
+            r for i, r in enumerate(records)
+            if r.artifact == ARTIFACT and r.role == role and r.action in (Action.ACCEPT, Action.REJECT)
+            and (after is None or i >= after)
+        ]
         if not mine:
             out.append(RoleStatus(role=role, status="pending"))
             continue
@@ -179,7 +188,7 @@ def review(store: RunStore, runs_root: Path, run_id: str) -> ModelReview:
     latest = _latest_validation(runs_root, run_id)
     roles = required_roles(spec)
     records = list_approvals(store, runs_root, run_id)
-    status = role_statuses(records, roles, live_hash)
+    status = role_statuses(records, roles, live_hash, reopened_after(runs_root, run_id))
 
     measures = []
     for m in sorted(spec.measures, key=lambda m: m.name):
@@ -274,7 +283,8 @@ def decide_model(
     gate = gate_ref = None
     actor = user["upn"]
     if action is Action.ACCEPT:
-        if next((s for s in role_statuses(records, [role], live_hash) if s.status == "approved"), None):
+        assert_fresh(run.artifacts, (TMDL_ARTIFACT, MODEL_ARTIFACT), "Approving the model")
+        if next((s for s in role_statuses(records, [role], live_hash, reopened_after(runs_root, run_id)) if s.status == "approved"), None):
             raise AlreadyApproved(f"{role} has already approved this version of the model")
         gate = g4_gate(_latest_validation(runs_root, run_id), live_hash)
         gate_ref = save_gate_result(runs_root, run_id, gate)
@@ -288,7 +298,7 @@ def decide_model(
     _append(runs_root, record)
 
     if action is Action.ACCEPT:
-        statuses = role_statuses([*records, record], required, live_hash)
+        statuses = role_statuses([*records, record], required, live_hash, reopened_after(runs_root, run_id))
         if all(s.status == "approved" for s in statuses):
             run = store.get(run_id)
             for name in (TMDL_ARTIFACT, MODEL_ARTIFACT):
