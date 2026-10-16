@@ -92,6 +92,7 @@ from app.repair.models import RepairResult
 from app.repair.service import repair as repair_model
 from app.model.bridge_sql import LlmCall as BridgeLlm
 from app.workflow.bridge_model_stage import generate_bridge
+from app.workflow.model_review import ModelReview, review as review_model
 from app.workflow.model_stage import generate_model
 from app.workflow.validate_stage import validate_model
 from app.workflow.plan_review import check_g3, edit_plan
@@ -259,6 +260,8 @@ def approve(
         comment=body.comment,
         edits=body.edits.model_dump(exclude_unset=True, mode="json") if body.edits else None,
         llm=llm,
+        role=body.role,
+        definition_wrong=body.definition_wrong,
     )
     return ApprovalResponse(
         approval=outcome.approval,
@@ -542,6 +545,15 @@ def model_bridge_generate(
         bridge_llm=bridge_llm, lakehouse_connector_factory=lakehouse_factory, user_upn=user.upn, actor=user.upn,
     )
     return BridgeGenerateResponse(version=version, validation=entry)
+
+
+@router.get("/{run_id}/model/review", response_model=ModelReview)
+def model_review(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    return review_model(store, runs_root, run_id)
 
 
 @router.patch("/{run_id}/plan", response_model=PlanEditResponse, response_model_by_alias=True)

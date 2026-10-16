@@ -12,12 +12,14 @@ import type {
   HarvestResult,
   Lakehouse,
   Me,
+  ModelReview,
   MetadataInventory,
   PlanEditResult,
   PlanOp,
   PlanResult,
   QuestionResult,
   StageCounts,
+  ValidationRun,
   RunDetail,
   RunList,
   ScopeBody,
@@ -230,6 +232,11 @@ export const api = {
       `/runs/${encodeURIComponent(id)}/plan/feasibility`,
       { method: "POST" },
     ),
+  getModelReview: (id: string) => apiFetch<ModelReview>(`/runs/${encodeURIComponent(id)}/model/review`),
+  validateModel: (id: string) =>
+    apiFetch<{ report: ValidationRun; run: RunDetail }>(`/runs/${encodeURIComponent(id)}/model/validate`, {
+      method: "POST",
+    }),
   listWorkspaces: () => apiFetch<Workspace[]>("/fabric/workspaces"),
   listLakehouses: (workspaceId: string) =>
     apiFetch<Lakehouse[]>(

@@ -493,10 +493,10 @@ The table holds two literal rows, so no Lakehouse connection is needed. If Fabri
 
 ### T-503 — DAX measure generation
 
-**Before you start:** run A of T-502, in state `MODEL_GENERATING` with `model1` generated (Net Revenue with the exclusion of cancelled orders, a monthly KPI with time logic, scope with `nexora_test.dim_date`). The API must reach the real model (`.env` set up, as for the compile step). The KPI definitions are what the model gets: make sure the Net Revenue KPI's exclusions state the status value to exclude (for example "Cancelled orders have Status = 6", answered through the clarification loop), because the model never sees data and the pre-check rejects a number the definition doesn't state.
+**Before you start:** run A of T-502, in state `MODEL_GENERATING` with `model\v1` generated (Net Revenue with the exclusion of cancelled orders, a monthly KPI with time logic, scope with `nexora_test.dim_date`). The API must reach the real model (`.env` set up, as for the compile step). The KPI definitions are what the model gets: make sure the Net Revenue KPI's exclusions state the status value to exclude (for example "Cancelled orders have Status = 6", answered through the clarification loop), because the model never sees data and the pre-check rejects a number the definition doesn't state.
 
-1. 🌐 **Measures added.** `POST /runs/{run_A}/model/measures` in Swagger. **Expected:** HTTP 200, `version: 2`, and Net Revenue `accepted` with `dax`. Its DAX uses only objects of the ModelSpec and applies the exclusion of cancelled orders. `runs\<run_A>\ModelSpec.yaml` is version 2 with that `dax` and a `description` starting `Approved: <the formula intent>` followed by `Exclusions: ...`. `runs\<run_A>\model2\definition	ables\<fact table>.tmdl` has the `measure` and a `///` description, and `model1` is unchanged. A second call returns the same measures and `version: 2` without calling the model. The run is still `MODEL_GENERATING`. A measure may come back `rejected` with a reason: report which one and why.
-2. 🌐 **Deployed and computes.** `python -m app.cli deploy model runs\<run_A>\model2 --name Nexora_<run>`. In the web model view of the sandbox workspace, run the DAX query `EVALUATE ROW("NR", [Net Revenue])`. **Expected:** a number.
+1. 🌐 **Measures added.** `POST /runs/{run_A}/model/measures` in Swagger. **Expected:** HTTP 200, `version: 2`, and Net Revenue `accepted` with `dax`. Its DAX uses only objects of the ModelSpec and applies the exclusion of cancelled orders. `runs\<run_A>\ModelSpec.yaml` is version 2 with that `dax` and a `description` starting `Approved: <the formula intent>` followed by `Exclusions: ...`. `runs\<run_A>\model\v2\definition\tables\<fact table>.tmdl` has the `measure` and a `///` description, and `model\v1` is unchanged. A second call returns the same measures and `version: 2` without calling the model. The run is still `MODEL_GENERATING`. A measure may come back `rejected` with a reason: report which one and why.
+2. 🌐 **Deployed and computes.** `python -m app.cli deploy model runs\<run_A>\model\v2 --name Nexora_<run>`. In the web model view of the sandbox workspace, run the DAX query `EVALUATE ROW("NR", [Net Revenue])`. **Expected:** a number.
 3. 🌐 **Matches SQL.** In the Lakehouse SQL endpoint run the equivalent query, for example `SELECT SUM(d.LineTotal) FROM saleslt.SalesLT_SalesOrderDetail d JOIN saleslt.SalesLT_SalesOrderHeader h ON h.SalesOrderID = d.SalesOrderID WHERE h.Status <> 6`. **Expected:** the same value as step 2. (T-504 automates this.)
 4. 💻 **Bad reference rejected.** Not repeatable live: editing a ModelSpec column by hand makes the next call `409 STALE_VERSION`, because the file no longer matches the approved hash. The offline checks cover it: a proposal that uses `Sales[Nope]` gets one retry carrying "unknown column 'Nope' ...", and if the retry fails too the measure is `rejected` with a reason naming `Sales[Nope]`, while the other measures are still processed.
 5. 💻 **Offline checks.** `python -m app.manual_tests.t503_offline_checks`. **Expected:** `All checks passed.` (reading DAX references, every rejection rule, the 2-attempt graph path, `date table required`, the endpoint with accepted and rejected measures, the replay without a model call, the TMDL and ModelSpec versions, and the 404/409 cases).
@@ -554,9 +554,27 @@ The table holds two literal rows, so no Lakehouse connection is needed. If Fabri
 
 ---
 
+### T-507 — Model review and approval UI
+
+**Before you start:** the T-506 setup: a run in `MODEL_GENERATING` with the measures added, validated once with `POST /runs/{id}/model/validate` (passing), API running (`uvicorn app.api.main:app --reload --port 8000`) and the UI (`cd rayfin-ui; npm install; npm run dev`, sign in at <http://localhost:3000>). Put **your own UPN** in `config\roles.yaml` under `bi_engineer` and `business_owner` (restore it afterwards). Open <http://localhost:3000/runs/{run_A}/model>.
+
+1. 🌐 **Side-by-side review.** **Expected:** the summary shows the state, **Gate G4 passed**, the version and the model hash. **Measures against their approved definitions** shows Net Revenue with its DAX on the left and, on the right, "Formula intent: Sum of line totals excluding cancelled orders" (and its exclusions), then the **DAX**, **SQL** and **Expected** values ("No business example" if none was given). Tables, relationships (with "filters both ways" or "one way"), RLS roles, the validation and the approval history are listed too.
+2. 🌐 **Partial approval.** Click **Approve as BI engineer**. **Expected:** the run is still `MODEL_GENERATING`, the BI engineer shows "Approved by <you>", and the Business owner shows **Pending**. A user without a role sees that role's Approve disabled with "Only a business_owner can approve as business_owner."
+3. 🌐 **Invalidation.** Change the model in any way that alters the deployed files: the simplest is to add a line `// reviewed` at the end of a dimension's file under `runs\<run_A>\model\v<n>\definition\tables\` (a repair or generating a bridge does the same). Reload the page. **Expected:** the BI engineer shows **Invalidated: model changed**, the history entry is marked "invalidated: model changed", the page warns that the latest validation is of another version, and approving as the Business owner gives `409 GATE_FAILED` (G4.CURRENT). Click **Validate again**: the warning goes, **Approve as BI engineer** is available again and the Business owner's earlier approval, if any, is invalidated too. (Generating the same model again with `python -m app.cli model generate` produces identical files and so the same hash: nothing is invalidated.)
+4. 🌐 **Complete.** Approve as BI engineer again, then as Business owner (if you hold both roles, they are two separate clicks). **Expected:** the run becomes `MODEL_APPROVED`, the history has one record per role with your UPN and the role, and `runs\<run_A>\approvals.jsonl` ends with those `SemanticModel` records on the current hash. With a contract that has a security requirement the model also needs **Security reviewer** (add your UPN under `security_reviewer`).
+5. 🌐 **Business owner rejects the definition.** On a fresh run: type a comment, tick "The KPI definition itself is wrong" and click **Reject as Business owner**. **Expected:** the run becomes `NEEDS_INPUT` and its history says the business owner says a KPI definition is wrong; the contract file is unchanged.
+6. 🌐 **M5 exit.** With a run taken through plan, model, measures, validation and the three or two approvals using Rayfin and the API only. **Expected:** the run is `MODEL_APPROVED`, `GET /runs/{id}/artifacts` shows `TMDLModel` and `ModelSpec` as `approved`, and the model `Nexora_<run>` exists in the sandbox workspace.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t507_offline_checks`. **Expected:** `All checks passed.` (the review data, partial and complete approval, one user with several roles, roles not required, role and hash checks, Gate G4, invalidation when the model changes, the security reviewer, Reject and the definition option, and the 404/409/422 cases).
+8. 💻 **Display-rule tests.** `cd rayfin-ui; npm test`. **Expected:** `pass 52`, `fail 0`. `npm run typecheck` and `npm run build` also finish without errors, and the build lists `/runs/[id]/model`.
+9. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API and UI, delete the models from the sandbox workspace, and delete the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live and browser steps (1-6), which need your Entra sign-in, Power BI consent and the sandbox workspace. Claude ran steps 7 and 8.
+
+---
+
 ## Next tasks
 
-Sections for T-507 and later are added when each task is implemented.
+Sections for T-601 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -590,6 +608,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t504_offline_checks.py` | T-504 | Fake-Fabric, Power BI, SQL and LLM checks of the G4 checks, the report and `model/validate` |
 | `app/manual_tests/t505_offline_checks.py` | T-505 | Fake-service checks of the repair policy, the `repair` graph, the scope guard and `model/repair` |
 | `app/manual_tests/t506_offline_checks.py` | T-506 | Fake-service checks of bridge generation, the notebook, G4.BRIDGE.* and `model/bridges/{id}/generate` |
+| `app/manual_tests/t507_offline_checks.py` | T-507 | Checks of the model review data, the role approvals of the SemanticModel and the move to MODEL_APPROVED |
 
 ## Adding a task
 

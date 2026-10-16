@@ -191,6 +191,16 @@ export default function RunDetailPage() {
             </section>
           )}
 
+          {(run.artifacts.TMDLModel || run.state.startsWith("MODEL_")) && (
+            <section className={styles.card} aria-label="Model">
+              <Subtitle2>Semantic model</Subtitle2>
+              <Body1>
+                <Link href={`/runs/${encodeURIComponent(run.run_id)}/model`}>Open the model review</Link> to compare each
+                measure with its approved definition, see the validation, and approve the model by role.
+              </Body1>
+            </section>
+          )}
+
           <div className={styles.columns}>
             <div className={styles.stack}>
               <section className={styles.card} aria-label="Prompt">

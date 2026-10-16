@@ -241,7 +241,7 @@ def main() -> int:
             check("REGENERATE writes a new contract version", after.version > 2)
 
             # request validation
-            check("unknown artifact is 422", client.post(f"/runs/{r3}/approvals", json={"artifact": "SemanticModel", "action": "ACCEPT", "expected_hash": h(r3)}).status_code == 422)
+            check("unknown artifact is 422", client.post(f"/runs/{r3}/approvals", json={"artifact": "ReportPlan", "action": "ACCEPT", "expected_hash": h(r3)}).status_code == 422)
             check("unknown action is 422", client.post(f"/runs/{r3}/approvals", json={"artifact": "BusinessContract", "action": "NUKE", "expected_hash": h(r3)}).status_code == 422)
             check("missing expected_hash is 422", client.post(f"/runs/{r3}/approvals", json={"artifact": "BusinessContract", "action": "EXPLAIN"}).status_code == 422)
             check("approvals before any compile are 404 NOT_FOUND", code(client.post(f"/runs/{store.create('z').run_id}/approvals", json={"artifact": "BusinessContract", "action": "EXPLAIN", "expected_hash": "x"})) == "NOT_FOUND")
