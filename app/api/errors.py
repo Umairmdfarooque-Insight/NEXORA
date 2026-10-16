@@ -50,6 +50,7 @@ from app.model.bridge_model import BridgeError
 from app.model.bridge_sql import BridgeSqlRejected
 from app.repair.service import NothingToRepair, UnsupportedArtifact
 from app.workflow.bridge_model_stage import BridgeNotApproved
+from app.workflow.model_review import InvalidRole
 from app.workflow.model_stage import ModelSpecInvalid
 from app.workflow.plan_review import PlanEditInvalid
 from app.workflow.scope import SchemaNotFound, ScopeLocked
@@ -218,6 +219,10 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(BridgeSqlRejected)
     async def bridge_sql_rejected(request: Request, exc: BridgeSqlRejected):
         return error_response(422, "VALIDATION_ERROR", f"No usable derivation SQL could be produced: {exc.reason}")
+
+    @app.exception_handler(InvalidRole)
+    async def invalid_role(request: Request, exc: InvalidRole):
+        return error_response(422, "VALIDATION_ERROR", str(exc))
 
     @app.exception_handler(NothingToRepair)
     async def nothing_to_repair(request: Request, exc: NothingToRepair):

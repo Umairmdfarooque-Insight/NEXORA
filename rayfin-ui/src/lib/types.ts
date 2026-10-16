@@ -166,10 +166,12 @@ export interface Explanation {
 }
 
 export interface ApprovalBody {
-  artifact: "BusinessContract" | "MetadataInventory" | "ExecutionPlan";
+  artifact: "BusinessContract" | "MetadataInventory" | "ExecutionPlan" | "SemanticModel";
   action: ApprovalAction;
   expected_hash: string;
   comment?: string;
+  role?: string; // the role acted as, for the SemanticModel
+  definition_wrong?: boolean; // a business_owner's Reject of the KPI definition itself
   edits?: { kpis: Record<string, KpiChanges> };
 }
 
@@ -442,4 +444,96 @@ export interface SourceResolution {
     fields: { need: string; table: string; column: string; role: string }[];
     unmapped: { need: string; role: string; reason: string }[];
   }[];
+}
+
+// --- Model review (T-507) ---
+
+export interface ModelReviewReconciliation {
+  dax_value: number | null;
+  sql_value: number | null;
+  expected: number | null;
+  status: "pass" | "fail" | "warning" | "not_validated";
+  message: string | null;
+}
+
+export interface ModelReviewMeasure {
+  name: string;
+  table: string;
+  dax: string | null;
+  description: string | null;
+  kpi_definition: {
+    name: string;
+    formula_intent: string | null;
+    grain: string | null;
+    filters: string[];
+    time_logic: string | null;
+    exclusions: string[];
+    currency: string | null;
+  } | null;
+  reconciliation: ModelReviewReconciliation;
+}
+
+export interface RoleStatus {
+  role: string;
+  status: "pending" | "approved" | "rejected" | "invalidated";
+  approval: ApprovalRecord | null;
+  note: string | null;
+}
+
+export interface ModelApproval extends ApprovalRecord {
+  current: boolean;
+  note: string | null;
+}
+
+export interface ValidationCheck {
+  id: string;
+  object: string;
+  status: "pass" | "fail" | "warning" | "skipped";
+  severity: string;
+  code: string | null;
+  message: string;
+  evidence: Record<string, unknown>;
+  fingerprint: string;
+}
+
+export interface ValidationRun {
+  artifact: string;
+  artifact_version: number;
+  artifact_hash: string;
+  attempt: number;
+  started_at: string;
+  passed: boolean;
+  repair_attempt: number | null;
+  checks: ValidationCheck[];
+}
+
+export interface ModelReview {
+  model_hash: string;
+  version: number;
+  state: string;
+  tables: {
+    name: string;
+    role: string;
+    grain: string | null;
+    source: string | null;
+    columns: { name: string; data_type: string; is_hidden: boolean }[];
+    hierarchies: string[];
+  }[];
+  relationships: {
+    name: string;
+    from: { table: string; column: string };
+    to: { table: string; column: string };
+    cardinality: string;
+    cross_filter: string;
+    evidence_ref: string | null;
+    override_rationale: string | null;
+  }[];
+  measures: ModelReviewMeasure[];
+  roles: { name: string; description: string; applies_to: string[] }[];
+  validation_report: ValidationRun | null;
+  validation_current: boolean;
+  gate: GateResult;
+  approvals_required: string[];
+  approvals_status: RoleStatus[];
+  approvals_done: ModelApproval[];
 }

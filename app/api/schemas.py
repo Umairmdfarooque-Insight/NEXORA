@@ -199,6 +199,8 @@ class ApprovalRequest(BaseModel):
     comment: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
     edits: ContractEdits | None = None
     expected_hash: str
+    role: str | None = None  # the role the user acts as, for the SemanticModel (T-507)
+    definition_wrong: bool = False  # a business_owner's Reject says the KPI definition itself is wrong
 
     @model_validator(mode="after")
     def _action_rules(self) -> "ApprovalRequest":

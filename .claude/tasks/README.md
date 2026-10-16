@@ -73,7 +73,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-504 | Model validators and Gate G4 | M5 | Done | task/T-504-model-validators-gate-g4 |
 | T-505 | Validation and Repair service | M5 | Done | task/T-505-validation-repair-service |
 | T-506 | Bridge-table generation | M5 | Done | task/T-506-bridge-table-generation |
-| T-507 | Model review and approval UI | M5 | Not started |  |
+| T-507 | Model review and approval UI | M5 | Done | task/T-507-model-review-approval-ui |
 | T-601 | Report planner | [M6 Report](M6-report.md) | Not started |  |
 | T-602 | PBIR generator and sandbox publish | M6 | Not started |  |
 | T-603 | Report validators and Gate G5 | M6 | Not started |  |

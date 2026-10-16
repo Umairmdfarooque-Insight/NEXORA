@@ -192,6 +192,8 @@ def perform(
     comment: str | None = None,
     edits: dict | None = None,
     llm: LlmCall | None = None,
+    role: str | None = None,
+    definition_wrong: bool = False,
 ) -> Outcome:
     """Carry out one approval action. `user` is {oid, upn}. Raises Forbidden, GateFailed,
     AlreadyApproved, ContractLocked, WrongState, StaleVersion, NotFound or UnknownArtifact;
@@ -206,6 +208,10 @@ def perform(
         from app.workflow.plan_review import decide_plan  # avoids a circular import
 
         return decide_plan(store, runs_root, run_id, action, user, expected_hash, comment)
+    if artifact == "SemanticModel":
+        from app.workflow.model_review import decide_model  # avoids a circular import
+
+        return decide_model(store, runs_root, run_id, action, user, expected_hash, comment, role, definition_wrong)
     if artifact.startswith("BridgeProposal:"):
         from app.workflow.bridge_stage import decide_bridge  # avoids a circular import
 

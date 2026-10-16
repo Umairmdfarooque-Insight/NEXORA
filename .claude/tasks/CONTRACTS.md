@@ -165,7 +165,7 @@ Appended to `runs/<run_id>/approvals.jsonl`, one JSON object per line. The file 
 
 - `action` is one of `ACCEPT` | `EDIT` | `REJECT` | `EXPLAIN` | `REGENERATE` (FR-018).
 - `artifact_version` and `artifact_hash` are those of the artifact version the action acted on. `ACCEPT` and `EDIT` record the version they produced (for `ACCEPT`, the locked, `approved` version).
-- `role` is the role the user held when acting (`business_owner` first), or `null` if the user holds none. `gate_result_ref` is set on `ACCEPT`.
+- `role` is the role the user held when acting (`business_owner` first), or `null` if the user holds none. `gate_result_ref` is set on `ACCEPT`. For the `SemanticModel` (T-507) the request names the role the user acts as (`role`), the user must hold it, and each role is its own action, so `role` is exactly that role.
 - A refused action (`FORBIDDEN`, `GATE_FAILED`, `STALE_VERSION`, …) writes no record.
 - `target` optionally narrows the action to one object, for example `{ "page": "Overview", "visual": "v3" }`.
 
