@@ -181,7 +181,7 @@ def _next_reviewer_id(contract: bc.BusinessContract) -> str:
     return f"REV-{max(numbers, default=0) + 1}"
 
 
-def perform(
+def _perform(
     store: RunStore,
     runs_root: Path,
     run_id: str,
@@ -316,3 +316,16 @@ def perform(
     )
     _append(runs_root, record)
     return Outcome(approval=record, run=store.get(run_id), gate_result=gate, explanation=explanation)
+
+
+def perform(store: RunStore, runs_root: Path, run_id: str, artifact: str, action: Action, *args: Any, **kwargs: Any) -> Outcome:
+    """Carry out one approval action (see `_perform`). After an Accept, if the run was returned to an
+    earlier stage (T-701), the artifacts that the newly approved one made stale are marked, and the
+    return is closed once the run is approved again as far as it was."""
+    outcome = _perform(store, runs_root, run_id, artifact, action, *args, **kwargs)
+    if outcome.approval.action is Action.ACCEPT:
+        from app.workflow.impact import on_accept  # avoids a circular import
+
+        on_accept(store, runs_root, run_id)
+        outcome.run = store.get(run_id)
+    return outcome

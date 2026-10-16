@@ -37,9 +37,17 @@ CACHE = "dax_suggestions.json"
 
 
 def add_measures(
-    store: RunStore, runs_root: Path, run_id: str, llm: LlmCall
+    store: RunStore,
+    runs_root: Path,
+    run_id: str,
+    llm: LlmCall,
+    only: set[str] | None = None,
+    expect_only: set[str] | None = None,
 ) -> tuple[list[dict], int]:
-    """`POST /runs/{id}/model/measures`: returns the per-measure results and the TMDL version."""
+    """`POST /runs/{id}/model/measures`: returns the per-measure results and the TMDL version.
+
+    `only` (T-701, targeted regeneration) limits the work to the measures with these names; the others
+    are not touched. `expect_only` is passed on to `write_model_version` (its scope guard)."""
     run = store.get(run_id)
     if run.state not in MEASURE_STATES:
         raise WrongState("Generating measures", run.state, MEASURE_STATES)
@@ -62,6 +70,8 @@ def add_measures(
     results: list[dict] = []
     changed = False
     for measure in sorted(spec.measures, key=lambda m: m.name):
+        if only is not None and measure.name not in only:
+            continue
         kpi = kpis.get(measure.kpi.casefold())
         if kpi is None:
             results.append({"name": measure.name, "dax": measure.dax, "status": "rejected", "reason": f"KPI {measure.kpi!r} is not in the approved contract"})
@@ -94,5 +104,5 @@ def add_measures(
     model_ref = run.artifacts[MODEL_ARTIFACT]
     model_ref.version, model_ref.hash, model_ref.updated_at = spec.version, canonical_hash(to_data(spec)), utc_now()
     store.save(run)  # status stays as it was; the DAX is approved with the model at G4
-    version, _ = write_model_version(store, runs_root, run_id)
+    version, _ = write_model_version(store, runs_root, run_id, expect_only)
     return results, version

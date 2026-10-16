@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.workflow.stale import StaleArtifacts, stale_names
 from app.workflow.states import RunState, can_transition
 
 SCHEMA_VERSION = 1
@@ -138,6 +139,10 @@ def apply_transition(
             raise ValueError("A target state is required unless the run is NEEDS_INPUT")
         to = run.resume_state or RunState.CREATED
 
+    if to is RunState.DEPLOYING:  # before the legality check: a stale run is refused for that reason
+        stale = stale_names(run.artifacts)
+        if stale:
+            raise StaleArtifacts("Deploying", stale)
     if not can_transition(from_, to, run.resume_state):
         raise IllegalTransition(from_, to)
 

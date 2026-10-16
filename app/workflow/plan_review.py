@@ -36,6 +36,7 @@ from app.workflow.plan_gate import run_g3
 from app.workflow.plan_stage import MODEL_ARTIFACT, MODEL_FILE, PLAN_ARTIFACT, PLAN_FILE, write_new_versions
 from app.workflow.roles import load_roles
 from app.workflow.run import Run, utc_now
+from app.workflow.stale import assert_fresh
 from app.workflow.states import RunState
 
 PLAN_ROLE = "bi_engineer"
@@ -153,6 +154,7 @@ def edit_plan(
     run = store.get(run_id)
     if run.state not in EDIT_STATES:
         raise WrongState("Editing the plan", run.state, EDIT_STATES)
+    assert_fresh(run.artifacts, (PLAN_ARTIFACT, MODEL_ARTIFACT), "Editing the plan")
     ref = _artifact(run)
     if ref.hash != expected_hash:
         raise StaleVersion(expected_hash, ref.hash, "plan")
@@ -207,6 +209,7 @@ def decide_plan(
     gate_ref = None
     actor = user["upn"]
     if action is Action.ACCEPT:
+        assert_fresh(run.artifacts, (PLAN_ARTIFACT, MODEL_ARTIFACT, "SourceResolution", "Feasibility"), "Approving the plan")
         gate = evaluate_g3(store, runs_root, run_id)
         gate_ref = save_gate_result(runs_root, run_id, gate)
         if not gate.passed:

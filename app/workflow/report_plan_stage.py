@@ -24,6 +24,7 @@ from app.workflow.llm_cache import CachedLlm, read_answers, write_answers
 from app.workflow.model_stage import TMDL_ARTIFACT
 from app.workflow.plan_stage import MODEL_ARTIFACT, MODEL_FILE
 from app.workflow.run import ArtifactRef, Run, utc_now
+from app.workflow.stale import assert_fresh
 from app.workflow.states import RunState
 
 ARTIFACT = "ReportPlan"
@@ -75,6 +76,7 @@ def generate_report_plan(
     run = store.get(run_id)
     if run.state not in PLAN_STATES:
         raise WrongState("Planning the report", run.state, PLAN_STATES)
+    assert_fresh(run.artifacts, (TMDL_ARTIFACT, MODEL_ARTIFACT), "Planning the report")
     spec = _load_spec(run, runs_root)
     contract = load_current_contract(runs_root, run_id)
     if contract is None:

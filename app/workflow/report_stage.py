@@ -27,7 +27,9 @@ from app.workflow.plan_stage import MODEL_ARTIFACT, MODEL_FILE
 from app.workflow.report_plan_stage import ARTIFACT as PLAN_ARTIFACT
 from app.workflow.report_plan_stage import CURRENT as PLAN_FILE
 from app.workflow.report_plan_stage import SEMANTIC_MODEL as BASED_ON_MODEL
+from app.workflow import scope_guard
 from app.workflow.run import ArtifactRef, Run, utc_now
+from app.workflow.stale import assert_fresh
 from app.workflow.states import RunState
 
 ARTIFACT = "PbirReport"
@@ -54,13 +56,23 @@ def report_name(run_id: str) -> str:
 
 
 def generate_report(
-    store: RunStore, runs_root: Path, run_id: str, items_client: FabricItemsClient, actor: str = "system"
+    store: RunStore,
+    runs_root: Path,
+    run_id: str,
+    items_client: FabricItemsClient,
+    actor: str = "system",
+    expect_only: set[str] | None = None,
 ) -> tuple[int, list[str], dict, Run]:
     """`POST /runs/{id}/report/generate`. Returns the version, its files (relative to
-    `report/v<n>/`), the publish result and the run."""
+    `report/v<n>/`), the publish result and the run.
+
+    `expect_only` (T-701, targeted regeneration) is the set of files (or folders, ending in `/`) that
+    may differ from the report version in place; any other difference raises ScopeViolation before
+    anything is published."""
     run = store.get(run_id)
     if run.state not in GENERATE_STATES:
         raise WrongState("Generating the report", run.state, GENERATE_STATES)
+    assert_fresh(run.artifacts, (PLAN_ARTIFACT, TMDL_ARTIFACT), "Generating the report")
     run_dir = Path(runs_root) / run_id
     plan_ref = run.artifacts.get(PLAN_ARTIFACT)
     if plan_ref is None or not (run_dir / PLAN_FILE).is_file():
@@ -108,6 +120,8 @@ def generate_report(
         if problems:
             raise ReportPlanInvalid("The generated report fails the PBIR checks: " + "; ".join(problems[:10]))
         files = [p.relative_to(staging).as_posix() for p in paths]
+        previous = run_dir / run.artifacts[ARTIFACT].path if ARTIFACT in run.artifacts else None
+        scope_guard.check("report", previous, staging, expect_only)
         digest = folder_digest(staging)
         published = items_client.upsert_report(workspace_id, report_name(run_id), staging)
         replace_file(staging, report_root / f"v{version}")

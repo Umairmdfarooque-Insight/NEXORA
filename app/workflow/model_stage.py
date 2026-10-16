@@ -19,8 +19,10 @@ from app.workflow.clarification import NotFound, StaleVersion
 from app.workflow.compile_stage import WrongState
 from app.workflow.gates import GateResult
 from app.workflow.harvest_stage import ScopeMissing, canonical_hash
-from app.workflow.plan_stage import MODEL_ARTIFACT, MODEL_FILE, PLAN_FILE, _validation
+from app.workflow import scope_guard
+from app.workflow.plan_stage import MODEL_ARTIFACT, MODEL_FILE, PLAN_ARTIFACT, PLAN_FILE, _validation
 from app.workflow.run import ArtifactRef, Run, utc_now
+from app.workflow.stale import assert_fresh
 from app.workflow.states import RunState
 
 TMDL_ARTIFACT = "TMDLModel"
@@ -54,8 +56,14 @@ def folder_hash(folder: Path) -> str:
     return "sha256:" + digest.hexdigest()
 
 
-def write_model_version(store: RunStore, runs_root: Path, run_id: str) -> tuple[int, list[str]]:
-    """Generate the next TMDL version from the approved ModelSpec. No state check, no state change."""
+def write_model_version(
+    store: RunStore, runs_root: Path, run_id: str, expect_only: set[str] | None = None
+) -> tuple[int, list[str]]:
+    """Generate the next TMDL version from the approved ModelSpec. No state check, no state change.
+
+    `expect_only` (T-701, targeted regeneration) is the set of files (or folders, ending in `/`) that
+    may differ from the TMDL version in place; any other difference raises ScopeViolation before the
+    version is kept."""
     run = store.get(run_id)
     model_ref = run.artifacts.get(MODEL_ARTIFACT)
     if model_ref is None or model_ref.status != "approved":
@@ -86,6 +94,8 @@ def write_model_version(store: RunStore, runs_root: Path, run_id: str) -> tuple[
         shutil.rmtree(staging)
     try:
         files = generate_tmdl(spec, staging, scope.sql_endpoint)  # raises before anything is kept
+        previous = run_dir / run.artifacts[TMDL_ARTIFACT].path if TMDL_ARTIFACT in run.artifacts else None
+        scope_guard.check("model", previous, staging, expect_only)
         digest = folder_hash(staging)
         replace_file(staging, final)
     finally:
@@ -106,13 +116,20 @@ def write_model_version(store: RunStore, runs_root: Path, run_id: str) -> tuple[
 
 
 def generate_model(
-    store: RunStore, runs_root: Path, run_id: str, *, from_repair: bool = False, actor: str = "system"
+    store: RunStore,
+    runs_root: Path,
+    run_id: str,
+    *,
+    from_repair: bool = False,
+    actor: str = "system",
+    expect_only: set[str] | None = None,
 ) -> tuple[int, list[str], Run]:
     """`POST /runs/{id}/model/generate`: PLAN_APPROVED (or MODEL_FAILED, for repair) to MODEL_GENERATING."""
     run = store.get(run_id)
     allowed = REPAIR_STATES if from_repair else GENERATE_STATES
     if run.state not in allowed:
         raise WrongState("Generating the model", run.state, allowed)
-    version, files = write_model_version(store, runs_root, run_id)
+    assert_fresh(run.artifacts, (MODEL_ARTIFACT, PLAN_ARTIFACT), "Generating the model")
+    version, files = write_model_version(store, runs_root, run_id, expect_only)
     run = store.transition(run_id, RunState.MODEL_GENERATING, f"Model v{version} generated", actor)
     return version, files, run

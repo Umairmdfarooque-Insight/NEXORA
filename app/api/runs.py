@@ -57,6 +57,8 @@ from app.api.schemas import (
     ReportGenerateResponse,
     ReportPlanResponse,
     ReportValidateResponse,
+    RegenerateStaleResponse,
+    ReturnRequest,
     RunDetail,
     RunList,
     RunSummary,
@@ -113,6 +115,8 @@ from app.workflow.plan_stage import generate_plan, read_plan
 from app.workflow.source_stage import load_saved_resolution
 from app.workflow.scope import bind_scope
 from app.workflow.source_stage import resolve_sources
+from app.workflow.impact import ImpactReport, read_impact, return_run
+from app.workflow.regenerate_stale import StaleServices, regenerate_stale
 from app.workflow.states import RunState
 
 router = APIRouter(
@@ -710,3 +714,49 @@ def list_artifacts(run_id: str, store: RunStore = Depends(get_store)):
         )
         for name, a in run.artifacts.items()
     ]
+
+
+@router.post("/{run_id}/return", response_model=RunDetail)
+def return_to_stage(
+    run_id: str,
+    body: ReturnRequest,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    user: Principal = Depends(current_user),
+):
+    run = return_run(store, runs_root, run_id, body.to, body.reason, {"oid": user.oid, "upn": user.upn})
+    return detail(run, runs_root)
+
+
+@router.get("/{run_id}/impact", response_model=ImpactReport)
+def get_impact(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+):
+    return read_impact(store, runs_root, run_id)
+
+
+@router.post("/{run_id}/regenerate-stale", response_model=RegenerateStaleResponse)
+def regenerate_stale_objects(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    source_llm=Depends(get_source_llm),
+    feasibility_llm=Depends(get_feasibility_llm),
+    dax_llm: DaxLlm = Depends(get_dax_llm),
+    recon_llm: ReconLlm = Depends(get_recon_llm),
+    items: FabricItemsClient = Depends(get_items_client),
+    pbi: PowerBiClient = Depends(get_powerbi_client),
+    sql_factory=Depends(get_sql_connector_factory),
+    user: Principal = Depends(current_user),
+):
+    result, run = regenerate_stale(
+        store, runs_root, run_id,
+        StaleServices(
+            source_llm=source_llm, feasibility_llm=feasibility_llm, dax_llm=dax_llm, recon_llm=recon_llm,
+            items=items, pbi=pbi, sql_factory=sql_factory, user_upn=user.upn,
+        ),
+        actor=user.upn,
+    )
+    return RegenerateStaleResponse(**result.model_dump(), run=detail(run, runs_root))

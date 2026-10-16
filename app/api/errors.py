@@ -56,6 +56,8 @@ from app.workflow.report_stage import ReportPlanInvalid
 from app.workflow.report_review import RegenerationOutOfScope
 from app.workflow.plan_review import PlanEditInvalid
 from app.workflow.scope import SchemaNotFound, ScopeLocked
+from app.workflow.scope_guard import ScopeViolation
+from app.workflow.stale import StaleArtifacts
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +215,14 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(RegenerationOutOfScope)
     async def regeneration_out_of_scope(request: Request, exc: RegenerationOutOfScope):
         return error_response(409, "SCOPE_VIOLATION", str(exc))
+
+    @app.exception_handler(StaleArtifacts)
+    async def stale_artifacts(request: Request, exc: StaleArtifacts):
+        return error_response(409, "STALE_ARTIFACTS", str(exc), {"stale": exc.names})
+
+    @app.exception_handler(ScopeViolation)
+    async def scope_violation(request: Request, exc: ScopeViolation):
+        return error_response(409, "SCOPE_VIOLATION", str(exc), {"files": exc.files})
 
     @app.exception_handler(ReportPlanInvalid)
     async def report_plan_invalid(request: Request, exc: ReportPlanInvalid):

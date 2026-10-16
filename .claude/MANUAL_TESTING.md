@@ -195,11 +195,14 @@ Needs Node.js 20 or later (checked with 24) and two terminals. Run the API from 
      status: open
    ```
    **Expected:** `INVALID` with a line naming `open_questions.0` and `Q1`. Change `status: open` to `status: answered` and it is `VALID`. With contract `status: draft` the open question is allowed.
-4. 💻 **Round trip.** `python -c "from app.contracts import business_contract as b; print(b.save(b.load('samples/contract_valid.yaml'), r'$env:TEMPt.yaml'))"` then `fc.exe /b samples\contract_valid.yaml $env:TEMPt.yaml`. **Expected:** a `sha256:…` line, then `FC: no differences encountered`.
+4. 💻 **Round trip.** `python -c "from app.contracts import business_contract as b; print(b.save(b.load('samples/contract_valid.yaml'), r'$env:TEMP
+t.yaml'))"` then `fc.exe /b samples\contract_valid.yaml $env:TEMP
+t.yaml`. **Expected:** a `sha256:…` line, then `FC: no differences encountered`.
 5. 💻 **Schema export.** `python -m app.cli contract schema --output $env:TEMP\schema.json`, then `python -c "import json,os; d=json.load(open(os.environ['TEMP']+'/schema.json')); print('kpis' in d['properties'])"`. **Expected:** `True`. (`python -m app.cli contract schema` prints the same JSON; with PowerShell's `>` the file would be UTF-16, which is why `--output` exists.) Compare with the committed file: `python -m app.manual_tests.t201_offline_checks` reports it as current.
 6. 💻 **Edge cases.** Make a copy each time. (a) Rename `kpis:` to `kpi:`. **Expected:** `kpi: extra field not permitted`. (b) Add `- name: net revenue` right under `kpis:`. **Expected:** a `kpis.1.name` line that also names `kpis.0.name`. (c) Set `schema_version: 2`. **Expected:** `unsupported schema_version 2`. (d) Empty the file. **Expected:** `empty document`. (e) Break the YAML, for example a lone `[` line. **Expected:** a message with `line` and `column`. (f) A path that doesn't exist. **Expected:** `File not found: …`, exit `2`.
 7. 💻 **Offline checks.** `python -m app.manual_tests.t201_offline_checks`. **Expected:** `All checks passed.` (38 checks covering all of the above, determinism, UTF-8/LF output, hash and the committed schema file).
-8. 💻 **Clean up.** `Remove-Item $env:TEMP\c2.yaml, $env:TEMPt.yaml, $env:TEMP\schema.json -ErrorAction SilentlyContinue`.
+8. 💻 **Clean up.** `Remove-Item $env:TEMP\c2.yaml, $env:TEMP
+t.yaml, $env:TEMP\schema.json -ErrorAction SilentlyContinue`.
 
 ---
 
@@ -635,9 +638,34 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 ---
 
+## M7 — Operational controls
+
+### T-701 — Impact analysis and stale marking
+
+**Before you start:** run A from M6, `REPORT_APPROVED`, with its model, report and approvals (the exit run of T-604), and the API running (`uvicorn app.api.main:app --reload --port 8000`). Put **your own UPN** in `config\roles.yaml` under `business_owner`, `bi_engineer` and `project_reviewer` (restore it afterwards). The calls below use Swagger at <http://localhost:8000/docs> (Authorize with your token, see the T-105 section) or the Rayfin screens named in each step. `<id>` is run A's `run_id`; the contract hash for edits is `artifacts.BusinessContract.hash` in `GET /runs/<id>`.
+
+1. 🌐 **Return and change.** `POST /runs/<id>/return` with `{"to": "REQUIREMENT_ANALYSIS", "reason": "Exclude tax"}`. **Expected:** `200`, state `CREATED`, `contract.status` `draft` with the version one higher, the reason in the history, and a `returned` line in `runs\<id>\returns.jsonl` with a baseline of every artifact; every earlier version (`contracts\BusinessContract.v<n>.yaml`, `model\v<n>`, `report\v<n>`, `plans\*.v<n>.yaml`) is still on disk. Then `PUT /runs/<id>/contract/kpis/Net%20Revenue` with `{"formula_intent": "<the old text> and tax", "expected_hash": "<hash>"}` (**Expected:** `200`), and `POST /runs/<id>/approvals` with `{"artifact": "BusinessContract", "action": "ACCEPT", "expected_hash": "<new hash>"}` (**Expected:** `200`, state `REQUIREMENT_APPROVED`).
+   - `POST /runs/<id>/return` in `DEPLOYING` (set it with `python -m app.cli runs transition <id> DEPLOYING` on a throw-away run that has no stale artifact) gives `409 WRONG_STATE`.
+2. 🌐 **Impact listed.** `GET /runs/<id>/impact`. **Expected:** `changed` is `BusinessContract` with `kpi:Net Revenue`; `stale` lists `SourceResolution`, `Feasibility` and `ExecutionPlan` (`kpi:Net Revenue`), `ModelSpec` and `TMDLModel` with the Net Revenue measure (and any measure whose DAX uses it), the TMDL file of its table (`file:definition/tables/<Table>.tmdl`), and `ReportPlan` / `PbirReport` with exactly the visuals that use those measures. Unrelated measures, tables and visuals are not listed. `GET /runs/<id>/artifacts` shows those artifacts as `stale`.
+3. 🌐 **Blocked.** `python -m app.cli runs transition <id> DEPLOYING`, then `echo $LASTEXITCODE`. **Expected:** exit `1` and a message that deploying is blocked by stale artifacts, naming them. In Swagger, `POST /runs/<id>/report/plan` gives `409 STALE_ARTIFACTS` with `details.stale` (once the run is in `MODEL_APPROVED`).
+4. 🌐 **Targeted regeneration, one stage at a time.** Call `POST /runs/<id>/regenerate-stale` and approve between the calls:
+   - **Plan.** **Expected:** state `DATA_PROFILED`; `regenerated` lists `SourceResolution`, `Feasibility`, `ModelSpec` and `ExecutionPlan`, `validation` has the plan checks (`PLAN`, passed). Only Net Revenue's entries differ from the approved versions (compare `runs\<id>\plans\ModelSpec.v<old>.yaml` with the new one: other measures, tables and relationships are identical). If Net Revenue became a data gap, the run is `NEEDS_INPUT` and `needs_review` says so. Approve the plan (G3) in Rayfin (`/runs/<id>/plan`) or `POST /approvals` for `ExecutionPlan` as `bi_engineer`.
+   - **Model.** Call it again. **Expected:** state `MODEL_GENERATING`; `regenerated` lists `TMDLModel`; `validation` has `G4` passed. `git diff --no-index --stat runs/<id>/model/v<approved> runs/<id>/model/v<new>` shows **only** the table file of the changed measure(s). Both roles must approve again in Rayfin (`/runs/<id>/model`): each shows **Pending**, although nothing else changed.
+   - **Report.** Call it again. **Expected:** state `REPORT_GENERATING`; `regenerated` lists `ReportPlan` and `PbirReport`; `validation` has `G5` passed. `git diff --no-index --stat runs/<id>/report/v<approved> runs/<id>/report/v<new>` (ignoring `renders`) shows nothing outside the listed visuals' `visual.json` files (and `definition.pbir`). Both roles approve again in Rayfin (`/runs/<id>/report`).
+   - **Done.** **Expected:** state `REPORT_APPROVED`; `GET /runs/<id>/impact` is `{"changed": [], "stale": [], "open_return": null}`; the last line of `returns.jsonl` is a `resolved` event; deploying is no longer blocked by stale artifacts.
+5. 🌐 **A change with no object-level effect.** On a second `REPORT_APPROVED` run: return to `REQUIREMENT_ANALYSIS`, then `POST /approvals` Accept without any KPI change. **Expected:** `GET /impact` has `stale: []`. `POST /regenerate-stale` regenerates nothing and the run walks back up to `REPORT_APPROVED` (history entries `DATA_PROFILED`, `PLAN_APPROVED`, `MODEL_GENERATING`, `MODEL_APPROVED`, `REPORT_GENERATING`, `REPORT_APPROVED`), the return resolved.
+6. 🌐 **Returning to planning and to the model.** On a third run: `POST /return` with `{"to": "PLANNING", "reason": "x"}`. **Expected:** state `DATA_PROFILED`, `ExecutionPlan` and `ModelSpec` `draft`, the model and report untouched. Remove a relationship with `PATCH /runs/<id>/plan` and approve the plan again. **Expected:** `GET /impact` lists the relationship under `changed` and the relationship file, the tables it joins and the visuals that use them as stale. With `{"to": "MODEL", ...}` from `MODEL_APPROVED` or `REPORT_APPROVED`: state `PLAN_APPROVED`, `TMDLModel` `draft`.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t701_offline_checks`. **Expected:** `All checks passed.` (return states and unlocking, the baseline log, the object-level impact for a changed, a deleted and a reworded KPI and for plan changes, stale marking, the deployment and stage guards, regeneration of the model and the report with the scope guard, approvals that don't survive a return, and the 404/409/422 cases). The plan layer (step 4, first bullet) needs the live LLM stages and a harvested inventory; offline only its object-level merge is checked.
+8. 💻 **Earlier checks still pass.** `python -m app.manual_tests.t101_offline_checks` (the state table) and `python -m app.manual_tests.t604_offline_checks`. **Expected:** `All checks passed.` for each.
+9. 💻 **Clean up.** Restore `config\roles.yaml` (`git checkout config/roles.yaml`), stop the API, delete the test runs' folders under `runs\` and their models and reports from the sandbox workspace.
+
+**Not run by Claude:** steps 1-6, which need your Entra sign-in, the sandbox workspace and live Fabric and the model. Claude ran steps 7 and 8.
+
+---
+
 ## Next tasks
 
-Sections for T-701 and later are added when each task is implemented.
+Sections for T-702 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -676,6 +704,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t602_offline_checks.py` | T-602 | Fake-Fabric checks of the PBIR generator, `upsert_report` and `report/generate` |
 | `app/manual_tests/t603_offline_checks.py` | T-603 | Fake-Fabric and Power BI checks of G5, `report/validate` and `report/repair` |
 | `app/manual_tests/t604_offline_checks.py` | T-604 | Checks of the report review data, the file endpoint, the role approvals of the Report and regenerating a visual or page |
+| `app/manual_tests/t701_offline_checks.py` | T-701 | Fake-service checks of returning a run, object-level impact, stale marking and its guards, and targeted regeneration |
 
 ## Adding a task
 

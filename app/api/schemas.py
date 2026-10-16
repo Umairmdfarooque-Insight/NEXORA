@@ -11,6 +11,7 @@ from app.contracts.model_plan import ExecutionPlan, ModelSpec
 from app.workflow.approval import Action, ApprovalRecord
 from app.workflow.gates import GateResult
 from app.workflow.inventory_review import DataGap
+from app.workflow.regenerate_stale import Regenerated, ValidationSummary
 from app.workflow.next_action import next_action
 from app.workflow.plan_review import PlanOp
 from app.workflow.run import MAX_PROMPT_LENGTH, Run
@@ -355,3 +356,15 @@ class Health(BaseModel):
     status: str
     app: str
     version: str
+
+
+class ReturnRequest(BaseModel):
+    to: Literal["REQUIREMENT_ANALYSIS", "PLANNING", "MODEL"]
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
+
+
+class RegenerateStaleResponse(BaseModel):
+    regenerated: list[Regenerated]
+    validation: list[ValidationSummary]
+    needs_review: list[str] = Field(default_factory=list)  # removed objects, and what a person must decide
+    run: RunDetail

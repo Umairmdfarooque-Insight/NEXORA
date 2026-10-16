@@ -47,8 +47,24 @@ def load_saved_resolution(runs_root: Path, run_id: str) -> SourceResolution:
     return SourceResolution.model_validate_json(path.read_text(encoding="utf-8"))
 
 
-def resolve_sources(store: RunStore, runs_root: Path, run_id: str, llm: SourceLlm) -> SourceResolution:
-    """Resolve the run's entities and KPI needs to tables and columns."""
+def _restricted(old: SourceResolution, entities: list, kpi_fields: list, restrict: set[str]) -> tuple[list, list]:
+    """The new entities and KPI fields only for the objects named in `restrict` (`kpi:<name>`,
+    `entity:<name>`); everything else stays as it was in `old` (T-701, targeted regeneration)."""
+    kpis = {o[4:].casefold() for o in restrict if o.startswith("kpi:")}
+    ents = {o[7:].casefold() for o in restrict if o.startswith("entity:")}
+    old_entities = {e.entity.casefold(): e for e in old.entities}
+    old_kpis = {k.kpi.casefold(): k for k in old.kpi_fields}
+    return (
+        [e if e.entity.casefold() in ents else old_entities.get(e.entity.casefold(), e) for e in entities],
+        [k if k.kpi.casefold() in kpis else old_kpis.get(k.kpi.casefold(), k) for k in kpi_fields],
+    )
+
+
+def resolve_sources(
+    store: RunStore, runs_root: Path, run_id: str, llm: SourceLlm, restrict: set[str] | None = None
+) -> SourceResolution:
+    """Resolve the run's entities and KPI needs to tables and columns. `restrict` (T-701) names the
+    objects to re-resolve (`kpi:<name>`, `entity:<name>`); the rest keeps the saved resolution."""
     run = store.get(run_id)
     if run.state not in SOURCE_STATES:
         raise WrongState("Resolving sources", run.state, SOURCE_STATES)
@@ -72,6 +88,11 @@ def resolve_sources(store: RunStore, runs_root: Path, run_id: str, llm: SourceLl
         save_answer(run_dir, CACHE, key, raw)
 
     entities, kpi_fields = resolve(contract, inventory, glossary, conformed, exceptions, suggestions)
+    if restrict is not None and (run_dir / CURRENT).is_file():
+        entities, kpi_fields = _restricted(
+            SourceResolution.model_validate_json((run_dir / CURRENT).read_text(encoding="utf-8")),
+            entities, kpi_fields, restrict,
+        )
 
     based_on = {
         name: run.artifacts[name].hash

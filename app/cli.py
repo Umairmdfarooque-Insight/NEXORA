@@ -9,6 +9,7 @@ from app.store.base import (
     IllegalTransition,
     RunCorrupt,
     RunNotFound,
+    StaleArtifacts,
     StoreUnavailable,
 )
 from app.store.factory import get_run_store
@@ -316,7 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError as exc:  # bad prompt, bad state name, bad RUN_STORE
         print(exc, file=sys.stderr)
         return 2
-    except (RunNotFound, IllegalTransition, RunCorrupt, StoreUnavailable) as exc:
+    except (RunNotFound, IllegalTransition, StaleArtifacts, RunCorrupt, StoreUnavailable) as exc:
         print(exc, file=sys.stderr)
         return 1
 
