@@ -16,6 +16,7 @@ from app.api.schemas import Health
 from app.compiler.critical_terms import load_critical_terms
 from app.config import APP_NAME, PROJECT_ROOT
 from app.observability import telemetry
+from app.security.startup import assert_no_external_tracing
 from app.observability.http import install as install_http_correlation
 from app.observability.logs import configure_logging
 from app.observability.middleware import correlation
@@ -52,6 +53,7 @@ install_http_correlation()
 async def lifespan(_app: FastAPI):
     load_critical_terms()  # a missing or invalid config/critical_terms.yaml stops the API here
     load_roles()  # so does config/roles.yaml
+    assert_no_external_tracing()  # and a LangSmith tracing setting (T-705)
     yield
 
 

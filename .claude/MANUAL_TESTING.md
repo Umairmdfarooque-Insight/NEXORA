@@ -708,11 +708,28 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 **Not run by Claude:** steps 1-5, which need the live model, your `.env` and Application Insights. Claude ran steps 6 and 7.
 
+### T-705 — Security hardening
+
+**Before you start:** `pip install -r requirements.txt` (it now lists `azure-keyvault-secrets`). You need an Azure Key Vault you can write to, with your own identity allowed to read secrets (role *Key Vault Secrets User*, or an access policy with Get). Sign in locally with `az login` (`DefaultAzureCredential` uses it). Never paste a real secret into chat or commit it.
+
+1. 🌐 **Secrets from Key Vault.** Create the secrets `azure-openai-api-key` (the model key) and, if you use the Rayfin sign-in, `entra-api-client-secret` in the vault. In `.env`, set `KEY_VAULT_URL=https://<your vault>.vault.azure.net/` and **delete the values** of `AZURE_OPENAI_API_KEY` and `ENTRA_API_CLIENT_SECRET` (leave the names empty). Start the API (`uvicorn app.api.main:app --reload --port 8000`) and compile a run. **Expected:** it works. Also `python -m app.tools.smoke --only llm` passes.
+   - Rotation: change the value of `azure-openai-api-key` in the vault to a wrong value and compile again (the running API still holds the old one: **Expected:** it works), then restart the API with the wrong value in the vault. **Expected:** the first model call fails with the model service's error; put the right value back in the vault and call again without restarting. **Expected:** it works (the `401` re-read the key and retried once).
+   - Unreachable vault: set `KEY_VAULT_URL=https://does-not-exist.vault.azure.net/` and start the API. **Expected:** it stops at startup with `CONFIG_ERROR` naming `KEY_VAULT_URL` and the host, and no secret value anywhere. Restore the URL.
+2. 🌐 **Run isolation.** User A creates a run in Rayfin (or `POST /runs`) and sets its scope to a workspace B cannot see. With user B's token (a second account, see the T-105 section for getting a token), call `GET /runs/<A's run>` and `POST /runs/<A's run>/compile`. **Expected:** `403` with code `FORBIDDEN` for both, and the run isn't in B's `GET /runs`. Then give B access to that workspace in Fabric and repeat after at most 5 minutes (the check is cached for 5 minutes). **Expected:** `200`, and the run is in B's list. Remove B from the workspace again: **Expected:** within 5 minutes B gets `403` again.
+3. 💻 **Guard blocks rows.** `python -m app.manual_tests.t705_guard_demo` (needs the usual `.env` settings, or dummy `AZURE_OPENAI_*` values in the shell). **Expected:** `PayloadRejected: The model payload was rejected: payload.input.customers is a list of 10 records with data columns (ID, Name), which looks like rows` and `No request was sent.`; the console also shows one JSON log line `"msg": "model payload rejected"` with the reason and the payload size and shape but no values.
+4. 🌐 **Payload log.** With the API running, run a compile, harvest, plan and model stage on a run and read the console. **Expected:** one `"msg": "model payload"` line per model call with `payload_chars` and `payload_shape` (for example `"input": "str[8412]"`) and no table values, row data or prompt text; a stage whose payload held rows would show `model payload rejected` and a `422 PAYLOAD_REJECTED`.
+5. 💻 **LangSmith blocked.** Add `LANGSMITH_TRACING=true` to `.env` and start the API. **Expected:** it exits with `ConfigError: CONFIG_ERROR: LANGSMITH_TRACING is true …`. The same for `LANGCHAIN_TRACING_V2=true`. Remove the line afterwards.
+6. 💻 **Offline checks.** `python -m app.manual_tests.t705_offline_checks`. **Expected:** `All checks passed.` (the vault, the fallback and rotation; the guard on rows, matrices, pasted tables, size, and every real payload of the pipeline; the shared client and its log; run access with the 5-minute cache by tenant and workspace; `422 PAYLOAD_REJECTED`; the LangSmith block).
+7. 💻 **Earlier checks still pass.** `python -m app.manual_tests.t102_offline_checks`, `python -m app.manual_tests.t105_offline_checks` and `python -m app.manual_tests.t704_offline_checks`. **Expected:** `All checks passed.` for each.
+8. 💻 **Clean up.** Restore `.env` (the key values or `KEY_VAULT_URL`, and remove `LANGSMITH_TRACING`), stop the API, delete the test secrets and runs.
+
+**Not run by Claude:** steps 1, 2 and 4, which need a real Key Vault, a second account, Fabric and the live model. Claude ran steps 3, 5, 6 and 7 (3 and 5 in-process, as part of step 6).
+
 ---
 
 ## Next tasks
 
-Sections for T-705 and later are added when each task is implemented.
+Sections for T-706 are added when it is implemented.
 
 ## Helper scripts
 
@@ -755,6 +772,8 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t702_offline_checks.py` | T-702 | Fake-Fabric and Power BI checks of the release approval, Gate G6, the lock, smoke tests, completion and rollback |
 | `app/manual_tests/t703_offline_checks.py` | T-703 | Checks of the tamper-evident event log, the audit timeline and the trace of a visual |
 | `app/manual_tests/t704_offline_checks.py` | T-704 | In-memory-exporter checks of correlation, spans, metrics, model-call cost and the no-content log rule |
+| `app/manual_tests/t705_guard_demo.py` | T-705 | Sends a payload of 10 rows through the shared model client: the guard refuses it |
+| `app/manual_tests/t705_offline_checks.py` | T-705 | Fake-vault, fake-model and fake-Fabric checks of secrets, the payload guard, run authorization and the LangSmith block |
 
 ## Adding a task
 
