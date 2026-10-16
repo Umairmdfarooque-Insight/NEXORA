@@ -18,18 +18,18 @@ Status values: Not started / In progress / Done.
 
 | Workstream | Status | Evidence / Link | Current Blocker | Next Decision |
 |---|---|---|---|---|
-| Rayfin UI |  |  |  |  |
-| Requirement contract |  |  |  |  |
-| Metadata discovery |  |  |  |  |
-| Data profiling |  |  |  |  |
-| Planning engine |  |  |  |  |
-| Semantic model generation |  |  |  |  |
-| Semantic model validation |  |  |  |  |
-| Report generation |  |  |  |  |
-| Report validation |  |  |  |  |
-| Human approvals |  |  |  |  |
-| Sandbox deployment |  |  |  |  |
-| Observability and audit |  |  |  |  |
+| Rayfin UI | In progress | T-104, T-105, T-205, T-304, T-405, T-507, T-604, T-703: `rayfin-ui/`, [MANUAL_TESTING.md](../MANUAL_TESTING.md); live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Requirement contract | In progress | T-201 to T-205: `app/compiler/`, `app/contracts/business_contract.py`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Metadata discovery | In progress | T-301, T-303, T-304: `app/discovery/harvester.py`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Data profiling | In progress | T-302: `app/discovery/data_profiler.py`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Planning engine | In progress | T-401 to T-405: `app/discovery/model_planner.py`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Semantic model generation | In progress | T-502, T-503, T-506: `app/model/`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Semantic model validation | In progress | T-504, T-505: `app/model/validators.py`, `app/repair/`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Report generation | In progress | T-601, T-602: `app/report/`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Report validation | In progress | T-603, T-604: `app/report/validators.py`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Human approvals | In progress | T-204, T-405, T-507, T-604, T-702: `app/workflow/approval.py`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Sandbox deployment | In progress | T-501, T-702: `app/deploy/`, `app/workflow/promotion.py`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
+| Observability and audit | In progress | T-703, T-704, T-705: `app/workflow/audit.py`, `app/observability/`, `app/security/`; live acceptance: [T-706-evidence.md](../tasks/T-706-evidence.md) | Live acceptance (T-706) | Set to Done when the live check passes |
 
 ## Key Risks and Mitigations
 

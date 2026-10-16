@@ -725,11 +725,32 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 **Not run by Claude:** steps 1, 2 and 4, which need a real Key Vault, a second account, Fabric and the live model. Claude ran steps 3, 5, 6 and 7 (3 and 5 in-process, as part of step 6).
 
+### T-706 — End-to-end vertical slice acceptance
+
+This is the acceptance of the whole slice. Record everything in [T-706-evidence.md](tasks/T-706-evidence.md). Use the sandbox workspace and a test "higher" workspace; never production. A defect found here is fixed on this branch in its own commit that names the scenario, and then **every** scenario is run again; a fix that needs a new feature stops the task and becomes a new task in the plan.
+
+**Before you start:** the API (`uvicorn app.api.main:app --reload --port 8000`) and the UI (`cd rayfin-ui; npm install; npm run dev`, <http://localhost:3000>) running, `.env` filled in (model, Fabric, Entra), `SANDBOX_WORKSPACE_ID` set, a sandbox Lakehouse with the `saleslt` sample data and the `nexora_test` fixtures (T-004), a second workspace you can access for the promotion, and your own UPN under every role you need in `config\roles.yaml` (or a colleague per role: business owner, BI engineer, project reviewer, release approver, security reviewer, data engineer). Restore `config\roles.yaml` afterwards.
+
+1. 💻 **Offline rehearsal.** `python -m app.manual_tests.t706_acceptance`. **Expected:** the Definition of Done list with every line ticked (the data stages are seeded; the rest runs through the API), a scenario table with `PASS` on all seven rows, and `All checks passed.`. It takes a few minutes: it runs the suites behind the scenarios as well. `python -m app.manual_tests.t706_acceptance --run-only` runs the integrated run alone.
+2. 🌐 **Simple Sales KPI, in Rayfin.** On `/runs/new` choose the sandbox workspace and Lakehouse and enter "Show revenue by month for 2024, from the line totals of the sales orders". Then, using only Rayfin (the run page links to every screen): **Compile** and answer the Revenue question (for example "Net Revenue = SUM of LineTotal excluding cancelled orders", currency USD) and approve the contract as the business owner → **Harvest, profile, analyze relationships**, review and accept the inventory as the data engineer → build the plan (sources, feasibility, bridges if shown, plan), review and approve it as the BI engineer → generate the model and the measures, validate, approve as the BI engineer and the business owner → plan, generate and validate the report, approve as the project reviewer and the business owner → approve the release as the release approver (API: `POST /runs/<id>/approvals`, artifact `Release`) → `POST /runs/<id>/deploy` to the test workspace. **Expected:** the run ends `COMPLETED`; `GET /runs/<id>` shows `deployment.outcome: completed` with the model and the report and their hashes and all smoke tests `pass`; both items exist in the test workspace; `/runs/<id>/audit` shows every stage with who approved it and when; `/runs/<id>/trace/v1` leads from the first visual to the prompt. Note the run ID in the evidence file.
+3. 🌐 **Intentional failures inside that run (Definition of Done items 7 and 9).** Before approving the model, break one measure in the deployed TMDL file (`runs\<id>\model\v<n>\definition\tables\<Table>.tmdl`: change a column name in the DAX), **Validate** and then **Repair**. **Expected:** G4 fails with the engine's message and the run is `MODEL_FAILED`; repair makes the next version in one attempt, only that table's file differs (`git diff --no-index --stat runs/<id>/model/v<n> runs/<id>/model/v<n+1>`), the model revalidates and passes. Before approving the report, edit one visual (`runs\<id>\report\v<n>\definition\pages\p1\visuals\v1\visual.json`: change a measure name), **Validate** and **Repair**. **Expected:** G5 fails on that visual (`G5.BIND`), repair regenerates only that `visual.json`.
+4. 🌐 **Ambiguous Revenue.** Submit a prompt that says "revenue" with no definition. **Expected:** a blocking question; nothing proceeds (the contract can't be approved, no harvest) until you define Revenue.
+5. 🌐 **Invalid relationship.** Using the `nexora_test` fixtures, plan a model that joins the fact to `nexora_test.dim_product_dupes` (duplicate product keys). **Expected:** validation fails on the relationship with the duplicate-key evidence and queries, the run is `MODEL_FAILED`, and the failed section is regenerated or escalated to `NEEDS_INPUT` for input (never silently passed).
+6. 🌐 **Many-to-many bridge.** With Product and Promotion (`nexora_test.bridge_product_promotion`): approve the proposed bridge, generate it (`POST /runs/<id>/model/bridges/<bridge id>/generate`). **Expected:** a bridge table with one-to-many relationships is generated and G4.BRIDGE.* checks pass.
+7. 🌐 **Unsupported bridge.** Use two entities that need a bridge with no mapping table and no rule in `config\derivation_rules.yaml`. **Expected:** `NEEDS_INPUT` or a data-engineering action; no bridge is guessed.
+8. 🌐 **Report binding failure.** As in step 3 (report). **Expected:** only the affected visual or page is repaired.
+9. 🌐 **Upstream KPI change.** On a run in `REPORT_APPROVED` (not yet deployed), `POST /runs/<id>/return` to `REQUIREMENT_ANALYSIS`, change the Net Revenue definition and approve the contract again. **Expected:** `GET /runs/<id>/impact` lists the measure, its TMDL table file and the visuals that use it as stale and nothing else; deploying is refused (`STALE_ARTIFACTS`); `POST /runs/<id>/regenerate-stale` stage by stage (see T-701) changes only those objects and the reviews are required again.
+10. 🌐 **Review checklist.** Walk through the checklist in the evidence file with the business, BI and security reviewers, on the live run. **Expected:** each reviewer answers every question for their area, "yes", with a note. A "no" is a defect: record it and follow the rule above.
+11. 🌐 **Status tracker.** In `.claude\technical-documentation\roadmap-risks-decisions.md`, set each workstream to `Done` once its evidence above is in place. **Expected:** every workstream `Done` and the workflow repeatable end to end (the M7 exit): run steps 2 to 8 once more on a second prompt to show it.
+12. 💻 **Clean up.** Restore `config\roles.yaml`, stop the API and UI, delete the test items from the sandbox and the test workspace and the test runs' folders you don't want to keep as evidence.
+
+**Not run by Claude:** steps 2 to 11, which need Rayfin, the live model, Fabric workspaces and people. Claude ran step 1.
+
 ---
 
 ## Next tasks
 
-Sections for T-706 are added when it is implemented.
+T-706 is the last task of the plan.
 
 ## Helper scripts
 
@@ -772,6 +793,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t702_offline_checks.py` | T-702 | Fake-Fabric and Power BI checks of the release approval, Gate G6, the lock, smoke tests, completion and rollback |
 | `app/manual_tests/t703_offline_checks.py` | T-703 | Checks of the tamper-evident event log, the audit timeline and the trace of a visual |
 | `app/manual_tests/t704_offline_checks.py` | T-704 | In-memory-exporter checks of correlation, spans, metrics, model-call cost and the no-content log rule |
+| `app/manual_tests/t706_acceptance.py` | T-706 | The integrated offline rehearsal of the vertical slice and the scenario table |
 | `app/manual_tests/t705_guard_demo.py` | T-705 | Sends a payload of 10 rows through the shared model client: the guard refuses it |
 | `app/manual_tests/t705_offline_checks.py` | T-705 | Fake-vault, fake-model and fake-Fabric checks of secrets, the payload guard, run authorization and the LangSmith block |
 
