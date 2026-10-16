@@ -34,7 +34,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | Orchestration | **Decided: hybrid.** An explicit state machine with `RunStore` owns run state, approvals and audit. LangGraph stage graphs run the LLM loops inside a stage. See [CONTRACTS.md#stage-graphs](CONTRACTS.md#stage-graphs). | T-101 (state machine), T-202 (first stage graph) |
 | Control store | **Decided: both.** Local file store under `runs/<run_id>/` is the default (`RUN_STORE=file`). A Fabric SQL Database store (`RUN_STORE=fabric_sql`, settings `FABRIC_CONTROL_DB_SERVER` and `FABRIC_CONTROL_DB_NAME`) sits behind the same `RunStore` interface. | T-101 |
 | Model authoring route | **Decided: canonical TMDL files generated deterministically (T-502), plus an optional MCP writer behind the same interface.** The MCP server and its tools are not chosen yet, so the writer isn't built. | T-502 |
-| Report authoring route | Deterministic PBIR generator | T-602 |
+| Report authoring route | **Decided: deterministic PBIR generator** (confirmed at T-602) | T-602 |
 | Sandbox topology | **Decided: one dedicated sandbox workspace per environment** (`SANDBOX_WORKSPACE_ID`) | T-501 |
 | Approval roles | **Decided: spec roles in a committed `config/roles.yaml`** (real UPNs in the public repo, one person may hold several roles during development) | T-204 |
 | Initial domain | **Decided: Sales** (the existing `saleslt` data) | T-202 |
@@ -75,7 +75,7 @@ The spec leaves these [open](../technical-documentation/roadmap-risks-decisions.
 | T-506 | Bridge-table generation | M5 | Done | task/T-506-bridge-table-generation |
 | T-507 | Model review and approval UI | M5 | Done | task/T-507-model-review-approval-ui |
 | T-601 | Report planner | [M6 Report](M6-report.md) | Done | task/T-601-report-planner |
-| T-602 | PBIR generator and sandbox publish | M6 | Not started |  |
+| T-602 | PBIR generator and sandbox publish | M6 | Done | task/T-602-pbir-generator-sandbox-publish |
 | T-603 | Report validators and Gate G5 | M6 | Not started |  |
 | T-604 | Report review and approval UI | M6 | Not started |  |
 | T-701 | Impact analysis and stale marking | [M7 Operational controls](M7-operational-controls.md) | Not started |  |

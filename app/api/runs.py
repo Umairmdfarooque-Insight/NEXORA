@@ -50,6 +50,7 @@ from app.api.schemas import (
     PlanResponse,
     ProfileResponse,
     QuestionResponse,
+    ReportGenerateResponse,
     ReportPlanResponse,
     RunDetail,
     RunList,
@@ -89,6 +90,7 @@ from app.model.dax_generator import LlmCall as DaxLlm
 from app.workflow.measure_stage import add_measures
 from app.report.planner import LlmCall as ReportLlm
 from app.workflow.report_plan_stage import generate_report_plan, read_report_plan
+from app.workflow.report_stage import generate_report
 from app.connectors.powerbi_api import PowerBiClient
 from app.deploy.fabric_items import FabricItemsClient
 from app.model.recon_sql import LlmCall as ReconLlm
@@ -561,6 +563,20 @@ def report_plan(
 ):
     plan, validation, run = generate_report_plan(store, runs_root, run_id, llm, actor=user.upn)
     return ReportPlanResponse(plan=plan.to_dict(), validation=validation, run=detail(run, runs_root))
+
+
+@router.post("/{run_id}/report/generate", response_model=ReportGenerateResponse)
+def report_generate(
+    run_id: str,
+    store: RunStore = Depends(get_store),
+    runs_root: Path = Depends(get_runs_root),
+    items: FabricItemsClient = Depends(get_items_client),
+    user: Principal = Depends(current_user),
+):
+    version, files, published, run = generate_report(store, runs_root, run_id, items, actor=user.upn)
+    return ReportGenerateResponse(
+        version=version, files=files, report_item_id=published["item_id"], operation=published["operation"], run=detail(run, runs_root)
+    )
 
 
 @router.get("/{run_id}/report/plan", response_model=ReportPlanResponse)

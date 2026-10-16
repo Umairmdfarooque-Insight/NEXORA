@@ -588,11 +588,26 @@ eports\ReportPlan.v1.json` exist. `GET /runs/{run_A}/artifacts` shows `ReportPla
 
 **Not run by Claude:** the live steps (1-3), which need your sign-in and the model service. Claude ran steps 4 and 5 offline.
 
+### T-602 — PBIR generator and sandbox publish
+
+**Before you start:** run A from T-601 in `MODEL_APPROVED` with a valid `ReportPlan.json` (no unanswered questions) and its model `Nexora_<first 8 characters of the run id>` deployed in the sandbox workspace (validating the model, T-504, deploys it). `SANDBOX_WORKSPACE_ID` in `.env`. The API's Entra app needs the Fabric delegated permission to create items (the same one as for the model). For the 2024 filter in step 1 the plan needs a page filter such as `{"table": "Date", "column": "Year", "values": [2024]}`: add it by hand under `pages[0].filters` in `runs\<run_A>\ReportPlan.json`.
+
+1. 🌐 **Visible report.** `POST /runs/{run_A}/report/generate`. **Expected:** `200` with `version: 1`, `operation: "created"`, a `report_item_id`, and the files (`definition.pbir`, `definition/report.json`, `definition/version.json`, `definition/pages/pages.json`, `definition/pages/p1/page.json`, `definition/pages/p1/visuals/v1/visual.json`, …). The run is now `REPORT_GENERATING`. In the sandbox workspace the report `Nexora_<first 8 characters>_Report` exists; open it: the pages, titles and visuals match `ReportPlan.json`, the visuals show data (the first load can take a moment), and the page filter (2024) is applied in the filters pane.
+2. 🌐 **Drill works.** On "Net Revenue by Month" (a line chart on the Calendar hierarchy) use the drill-down arrow. **Expected:** the chart goes Year → Quarter → Month, as the plan describes.
+3. 💻 **Deterministic.** Call `POST /runs/{run_A}/report/generate` again, then compare the folders: `git diff --no-index --stat runs/<run_A>/report/v1 runs/<run_A>/report/v2`. **Expected:** no difference (the run stays `REPORT_GENERATING`).
+4. 🌐 **No duplicate.** After step 3. **Expected:** the second response has `operation: "updated"` and the same `report_item_id`; the workspace still has one report with that name.
+5. 🌐 **Rebinding.** Note the model's item id from `runs\<run_A>\ReportPublish.json` (`semantic_model_item_id`). Delete the model `Nexora_<first 8 characters>` in the workspace and deploy it again (`python -m app.cli deploy model runs\<run_A>\model\v<n> --name Nexora_<first 8 characters>`), then generate again. **Expected:** `definition.pbir` of the new version carries the new model's id (`semanticmodelid=…`) and the report opens on the new model.
+6. 💻 **Errors.** In `runs\<run_A>\ReportPlan.json` change a visual's `"type"` to `"pieChart"`: `POST …/report/generate` gives `422 VALIDATION_ERROR` naming `v1` and listing the allowed types, with nothing published. A wrong state gives `409 WRONG_STATE`; no plan `404`; the model missing from the sandbox `404`; a Fabric rejection `502 UPSTREAM_ERROR` with Fabric's message and no new `report\v<n>` folder. Restore the plan from `runs\<run_A>\reports\ReportPlan.v1.json` afterwards.
+7. 💻 **Offline checks.** `python -m app.manual_tests.t602_offline_checks`. **Expected:** `All checks passed.` (layout, `$schema`s, determinism, the hierarchy and drill levels, filters, interactions, the visual types, the item client's create and update, the endpoint and its errors).
+8. 💻 **Clean up.** Delete the report and the model from the sandbox workspace and the test runs' folders under `runs\`.
+
+**Not run by Claude:** the live steps (1, 2, 4, 5 and the Fabric error in 6), which need your sign-in and the sandbox workspace. Claude ran step 7. The generated files follow Microsoft's published PBIR schemas, but nothing here validates them against the live JSON schemas: if Fabric or Power BI rejects a file, the message names it, and the generator (`app/report/pbir_generator.py`) is what to fix. Two details were written from Microsoft's examples and may need adjusting on first contact: `visualInteractions` in `page.json` and the visual title under `visualContainerObjects`.
+
 ---
 
 ## Next tasks
 
-Sections for T-602 and later are added when each task is implemented.
+Sections for T-603 and later are added when each task is implemented.
 
 ## Helper scripts
 
@@ -628,6 +643,7 @@ Any script a manual test needs is committed under `app/manual_tests/` (one file 
 | `app/manual_tests/t506_offline_checks.py` | T-506 | Fake-service checks of bridge generation, the notebook, G4.BRIDGE.* and `model/bridges/{id}/generate` |
 | `app/manual_tests/t507_offline_checks.py` | T-507 | Checks of the model review data, the role approvals of the SemanticModel and the move to MODEL_APPROVED |
 | `app/manual_tests/t601_offline_checks.py` | T-601 | Fake-LLM checks of the report questions, RPLAN.1-RPLAN.7, the planner and `report/plan` |
+| `app/manual_tests/t602_offline_checks.py` | T-602 | Fake-Fabric checks of the PBIR generator, `upsert_report` and `report/generate` |
 
 ## Adding a task
 

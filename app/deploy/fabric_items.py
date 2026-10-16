@@ -35,6 +35,7 @@ MAX_PAGES = 1000
 
 SEMANTIC_MODEL = "SemanticModel"
 NOTEBOOK = "Notebook"
+REPORT = "Report"
 
 
 class TargetNotAllowed(Exception):
@@ -89,6 +90,25 @@ def tmdl_parts(tmdl_dir: Path) -> list[dict]:
     return [
         {
             "path": f.relative_to(tmdl_dir).as_posix(),
+            "payload": base64.b64encode(f.read_bytes()).decode("ascii"),
+            "payloadType": "InlineBase64",
+        }
+        for f in files
+    ]
+
+
+def pbir_parts(pbir_dir: Path) -> list[dict]:
+    """The definition parts of a PBIR folder: definition.pbir and definition/**."""
+    pbir_dir = Path(pbir_dir)
+    pbir = pbir_dir / "definition.pbir"
+    if not pbir.is_file():
+        raise InvalidDefinition(f"definition.pbir not found in {pbir_dir}")
+    if not (pbir_dir / "definition").is_dir():
+        raise InvalidDefinition(f"definition folder not found in {pbir_dir}")
+    files = [pbir] + sorted(p for p in (pbir_dir / "definition").rglob("*") if p.is_file())
+    return [
+        {
+            "path": f.relative_to(pbir_dir).as_posix(),
             "payload": base64.b64encode(f.read_bytes()).decode("ascii"),
             "payloadType": "InlineBase64",
         }
@@ -269,6 +289,14 @@ class FabricItemsClient:
         self._check_target(workspace_id)
         return self._upsert(
             workspace_id, display_name, SEMANTIC_MODEL, "semanticModels", {"parts": tmdl_parts(tmdl_dir)}, "model"
+        )
+
+    def upsert_report(self, workspace_id: str, display_name: str, pbir_dir: Path) -> dict:
+        """Create or update a report (PBIR folder) in the sandbox workspace. Returns
+        {"item_id", "operation": "created"|"updated"}; a repeat leaves one report."""
+        self._check_target(workspace_id)
+        return self._upsert(
+            workspace_id, display_name, REPORT, "reports", {"format": "PBIR", "parts": pbir_parts(pbir_dir)}, "report"
         )
 
     def upsert_notebook(self, workspace_id: str, display_name: str, ipynb: Path) -> dict:
